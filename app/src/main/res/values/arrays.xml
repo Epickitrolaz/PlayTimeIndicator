@@ -1,0 +1,102 @@
+<resources>
+    <string-array name="xposed_scope">
+        <item>com.android.systemui</item>
+        <item>com.handheld.playtime</item>
+    </string-array>
+
+    <!-- Position: Battery Left/Right, Clock Left/Right, or Replace Battery % -->
+    <string-array name="position_entries">
+        <item>Left of Battery</item>
+        <item>Right of Battery</item>
+        <item>Left of Clock</item>
+        <item>Right of Clock</item>
+        <item>Replace Battery Percentage</item>
+    </string-array>
+
+    <string-array name="position_values">
+        <item>BATTERY_LEFT</item>
+        <item>BATTERY_RIGHT</item>
+        <item>CLOCK_LEFT</item>
+        <item>CLOCK_RIGHT</item>
+        <item>REPLACE_PERCENT</item>
+    </string-array>
+
+    <!-- Detail Levels: Watts, Volts, Time combinations -->
+    <string-array name="detail_mode_entries">
+        <item>Time Remaining Only (e.g. 2h 45m)</item>
+        <item>Time + Wattage (e.g. 2h 45m · 5.4W)</item>
+        <item>Time + Wattage + Voltage (e.g. 2h 45m · 5.4W · 3.85V)</item>
+        <item>Time + Voltage (e.g. 2h 45m · 3.85V)</item>
+        <item>Wattage Only (e.g. 5.4W)</item>
+        <item>Voltage Only (e.g. 3.85V)</item>
+        <item>Wattage + Voltage (e.g. 5.4W · 3.85V)</item>
+    </string-array>
+
+    <string-array name="detail_mode_values">
+        <item>TIME_ONLY</item>
+        <item>TIME_WATTS</item>
+        <item>TIME_WATTS_VOLTS</item>
+        <item>TIME_VOLTS</item>
+        <item>WATTS_ONLY</item>
+        <item>VOLTS_ONLY</item>
+        <item>WATTS_VOLTS</item>
+    </string-array>
+
+    <!-- Charging Indicator Symbol: Non-color vs Emoji -->
+    <string-array name="charging_symbol_entries">
+        <item>Monochrome Zigzag (↯) [Non-color]</item>
+        <item>Plus Sign (+) [Non-color]</item>
+        <item>Text Tag (CHG) [Non-color]</item>
+        <item>Color Emoji (⚡)</item>
+    </string-array>
+
+    <string-array name="charging_symbol_values">
+        <item>BOLT_MONO</item>
+        <item>PLUS</item>
+        <item>TEXT</item>
+        <item>BOLT_COLOR</item>
+    </string-array>
+
+    <!-- Time Format Styles -->
+    <string-array name="format_entries">
+        <item>Compact (e.g. 2h 45m)</item>
+        <item>Short (e.g. 2h45)</item>
+        <item>Digital Colon (e.g. 2:45)</item>
+        <item>Detailed (e.g. 2 hr 45 min)</item>
+    </string-array>
+
+    <string-array name="format_values">
+        <item>COMPACT</item>
+        <item>SHORT</item>
+        <item>COLON</item>
+        <item>DETAILED</item>
+    </string-array>
+
+    <!-- Averaging Window -->
+    <string-array name="window_entries">
+        <item>1 Minute (Ultra Responsive)</item>
+        <item>3 Minutes (Responsive)</item>
+        <item>5 Minutes (Recommended - Gaming)</item>
+        <item>10 Minutes (Smoothed)</item>
+    </string-array>
+
+    <string-array name="window_values">
+        <item>1</item>
+        <item>3</item>
+        <item>5</item>
+        <item>10</item>
+    </string-array>
+
+    <!-- Refresh Polling Rate -->
+    <string-array name="interval_entries">
+        <item>3 Seconds (Fast)</item>
+        <item>5 Seconds (Recommended)</item>
+        <item>10 Seconds (Battery Saver)</item>
+    </string-array>
+
+    <string-array name="interval_values">
+        <item>3</item>
+        <item>5</item>
+        <item>10</item>
+    </string-array>
+</resources>

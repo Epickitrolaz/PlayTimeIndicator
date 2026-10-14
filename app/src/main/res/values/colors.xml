@@ -1,0 +1,13 @@
+<resources>
+    <color name="primary">#1E88E5</color>
+    <color name="primary_variant">#1565C0</color>
+    <color name="secondary">#26A69A</color>
+    <color name="background">#121212</color>
+    <color name="surface">#1E1E1E</color>
+    <color name="surface_variant">#2C2C2C</color>
+    <color name="text_primary">#E0E0E0</color>
+    <color name="text_secondary">#9E9E9E</color>
+    <color name="status_green">#4CAF50</color>
+    <color name="status_red">#E53935</color>
+    <color name="accent_handheld">#FF9800</color>
+</resources>

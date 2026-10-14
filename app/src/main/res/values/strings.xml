@@ -1,0 +1,38 @@
+<resources>
+    <string name="app_name">PlayTime Indicator</string>
+    <string name="xposed_description">Displays remaining gaming play time, wattage, and voltage in the status bar based on rolling 5-minute active discharge.</string>
+
+    <string name="status_active">Module is Active in Vector</string>
+    <string name="status_inactive">Module Not Activated in Vector</string>
+    <string name="status_hint">Enable this module in Vector/LSPosed and check the System UI scope, then restart SystemUI.</string>
+
+    <string name="card_diagnostics">Live Fuel Gauge Diagnostics</string>
+    <string name="live_current">Current Draw: %s</string>
+    <string name="live_capacity">Remaining Capacity: %s</string>
+    <string name="live_estimate">Calculated Play Time: %s</string>
+    <string name="live_voltage">Battery Voltage: %s</string>
+
+    <string name="card_display_settings">Display &amp; Position Settings</string>
+    <string name="pref_enable">Enable Status Bar Indicator</string>
+    <string name="pref_enable_summary">Show play time remaining in the status bar</string>
+    <string name="pref_position">Indicator Position</string>
+    <string name="pref_detail_mode">Metrics &amp; Detail Level</string>
+    <string name="pref_charging_symbol">Charging Indicator Icon</string>
+    <string name="pref_format">Time Format Style</string>
+    <string name="pref_font_size">Font Size (sp)</string>
+    <string name="pref_tap_toggle">Tap to Cycle Metrics</string>
+    <string name="pref_tap_toggle_summary">Tap the indicator in the status bar to cycle between Time, Wattage, Voltage, and Percentage</string>
+
+    <string name="card_calc_settings">Estimation Engine</string>
+    <string name="pref_window_minutes">Averaging Window</string>
+    <string name="pref_window_summary">Calculates power draw from the last %d minutes of active gaming (ignoring sleep)</string>
+    <string name="pref_interval_seconds">Refresh Interval</string>
+    <string name="pref_interval_summary">Polls battery fuel-gauge every %d seconds</string>
+
+    <string name="card_device_settings">Hardware &amp; Capacity</string>
+    <string name="pref_capacity_override">Manual Capacity (mAh)</string>
+    <string name="pref_capacity_override_summary">Set to 0 to auto-detect from kernel. Set e.g. 8000 for Odin 2, 5000 for RP4 Pro.</string>
+
+    <string name="btn_apply">Apply Settings to SystemUI</string>
+    <string name="toast_applied">Settings sent to SystemUI!</string>
+</resources>
