@@ -14,7 +14,13 @@ echo "=== Running Unit Tests ==="
 echo "=== Building Debug APK ==="
 ./gradlew assembleDebug
 
+echo "=== Building Release APK ==="
+./gradlew assembleRelease
+
 cp "$DIR/app/build/outputs/apk/debug/app-debug.apk" "$DIR/PlayTimeIndicator-debug.apk"
+cp "$DIR/app/build/outputs/apk/release/app-release.apk" "$DIR/PlayTimeIndicator-v1.0.0.apk"
+ln -sf "$DIR/PlayTimeIndicator-v1.0.0.apk" "$DIR/PlayTimeIndicator-release.apk"
 
 echo "=== Build Complete! ==="
-echo "Output APK: $DIR/PlayTimeIndicator-debug.apk"
+echo "Debug APK:   $DIR/PlayTimeIndicator-debug.apk"
+echo "Release APK: $DIR/PlayTimeIndicator-v1.0.0.apk"
