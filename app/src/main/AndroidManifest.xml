@@ -35,11 +35,24 @@
             </intent-filter>
         </activity>
 
-        <!-- ContentProvider allowing SystemUI to pull configurations across userspace -->
+        <!-- ContentProvider allowing SystemUI to pull configurations across userspace (Direct Boot aware) -->
         <provider
             android:name=".config.PlayTimeConfigProvider"
             android:authorities="com.handheld.playtime.provider"
-            android:exported="true" />
+            android:exported="true"
+            android:directBootAware="true" />
+
+        <!-- Broadcast receiver to dispatch config update to SystemUI upon boot completion -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

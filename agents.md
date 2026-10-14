@@ -35,6 +35,7 @@ It solves the problem of stock Android battery estimations factoring in hours of
         │   │   └── xposed_init             # Entrypoint hook class: com.handheld.playtime.hook.SystemUIHook
         │   ├── java/com/handheld/playtime/
         │   │   ├── MainActivity.java       # Material 3 settings UI & live fuel gauge diagnostics
+        │   │   ├── BootReceiver.java       # Direct Boot & BOOT_COMPLETED sync dispatcher
         │   │   ├── battery/
         │   │   │   ├── BatteryReader.java      # Dual-tier hardware reader (sysfs + BatteryManager)
         │   │   │   └── PlayTimeEstimator.java  # Rolling time-series estimator & string formatter
@@ -88,10 +89,11 @@ It solves the problem of stock Android battery estimations factoring in hours of
   - **Charging:** $T_{\text{to\_full}} = \frac{\text{Max Capacity} - \text{Current Capacity}}{\text{Rolling Average Charge Rate (mA)}}$
 - **Formatting:** Supports `COMPACT` (`2h 45m`), `SHORT` (`2h45`), `COLON` (`2:45`), and `DETAILED` (`2 hr 45 min`), with customizable detail levels (Watts, Volts).
 
-### 3.4. Inter-Process Communication (IPC)
-- Companion App writes preferences to `SharedPreferences` and publishes them through `PlayTimeConfigProvider` (`content://com.handheld.playtime.provider/config`).
-- When settings are saved, `MainActivity` sends an explicit broadcast `com.handheld.playtime.UPDATE_CONFIG` with the config bundle.
-- `SystemUIHook` receives the broadcast and applies layout, formatting, and timer updates immediately without requiring a reboot.
+### 3.4. Inter-Process Communication (IPC) & Boot Persistence
+- Companion App writes preferences to `SharedPreferences` in both standard and Device-Protected (`createDeviceProtectedStorageContext()`) storage, allowing Direct Boot access before user unlock.
+- Settings are shared cross-process through `PlayTimeConfigProvider` (`content://com.handheld.playtime.provider/config`) with `directBootAware="true"`.
+- **SystemUI Local Cache:** `SystemUIHook` persists received configs directly inside SystemUI's private SharedPreferences (`playtime_systemui_cache`). Upon handheld restart, SystemUI reads this local cache on the exact first millisecond of boot, guaranteeing 0ms latency and eliminating default-setting fallbacks before third-party apps boot.
+- **Boot Dispatcher:** `BootReceiver` listens for `ACTION_LOCKED_BOOT_COMPLETED`, `ACTION_BOOT_COMPLETED`, and quickboot intents, proactively broadcasting `com.handheld.playtime.ACTION_UPDATE_CONFIG` to SystemUI to ensure complete state synchronization.
 
 ---
 

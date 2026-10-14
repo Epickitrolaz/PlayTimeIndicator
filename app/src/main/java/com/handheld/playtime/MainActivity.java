@@ -68,6 +68,17 @@ public class MainActivity extends AppCompatActivity {
         loadConfigToUi();
         updateStatusCard();
         startDiagnosticLoop();
+
+        // Broadcast current config to SystemUI so status bar is immediately updated
+        mConfig.sendUpdateBroadcast(this);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mConfig != null) {
+            mConfig.sendUpdateBroadcast(this);
+        }
     }
 
     private void initViews() {

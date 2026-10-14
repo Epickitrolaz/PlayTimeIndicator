@@ -2,6 +2,7 @@ package com.handheld.playtime.config;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
@@ -20,8 +21,9 @@ public class PlayTimeConfigProvider extends ContentProvider {
     @Override
     public Bundle call(@NonNull String method, @Nullable String arg, @Nullable Bundle extras) {
         if (PlayTimeConfig.METHOD_GET_CONFIG.equals(method)) {
-            if (getContext() != null) {
-                PlayTimeConfig config = PlayTimeConfig.fromSharedPreferences(getContext());
+            Context ctx = getContext();
+            if (ctx != null) {
+                PlayTimeConfig config = PlayTimeConfig.fromSharedPreferences(ctx);
                 return config.toBundle();
             }
         }

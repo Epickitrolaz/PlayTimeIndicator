@@ -11,11 +11,14 @@ public class PlayTimeConfig {
     private static final String TAG = "PlayTimeConfig";
 
     public static final String PREF_NAME = "playtime_settings";
+    public static final String SYSTEMUI_CACHE_PREF = "playtime_systemui_cache";
     public static final String ACTION_UPDATE_CONFIG = "com.handheld.playtime.ACTION_UPDATE_CONFIG";
     public static final String AUTHORITY = "com.handheld.playtime.provider";
     public static final Uri CONTENT_URI = Uri.parse("content://" + AUTHORITY);
     public static final String METHOD_GET_CONFIG = "getConfig";
 
+    public static final String KEY_IS_VALID = "is_valid";
+    public static final String KEY_HAS_SAVED_CONFIG = "has_saved_config";
     public static final String KEY_ENABLED = "enabled";
     public static final String KEY_WINDOW_MINUTES = "window_minutes";
     public static final String KEY_INTERVAL_SECONDS = "interval_seconds";
@@ -31,7 +34,7 @@ public class PlayTimeConfig {
     public int windowMinutes = 5;
     public int intervalSeconds = 5;
     public String format = "COMPACT"; // COMPACT, SHORT, COLON, DETAILED
-    public String position = "BATTERY_LEFT"; // BATTERY_LEFT, BATTERY_RIGHT, CLOCK_LEFT, CLOCK_RIGHT
+    public String position = "BATTERY_LEFT"; // BATTERY_LEFT, BATTERY_RIGHT, CLOCK_LEFT, CLOCK_RIGHT, REPLACE_PERCENT
     public String detailMode = "TIME_ONLY"; // TIME_ONLY, TIME_WATTS, TIME_WATTS_VOLTS, TIME_VOLTS, WATTS_ONLY, VOLTS_ONLY, WATTS_VOLTS
     public String chargingSymbol = "BOLT_MONO"; // BOLT_MONO (↯), PLUS (+), TEXT (CHG), BOLT_COLOR (⚡)
     public float fontSize = 12f;
@@ -40,33 +43,64 @@ public class PlayTimeConfig {
 
     public static PlayTimeConfig fromSharedPreferences(Context context) {
         PlayTimeConfig config = new PlayTimeConfig();
+        if (context == null) return config;
+
+        // 1. Try standard credential-encrypted storage
         try {
             SharedPreferences sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            config.enabled = sp.getBoolean(KEY_ENABLED, true);
-            config.windowMinutes = sp.getInt(KEY_WINDOW_MINUTES, 5);
-            config.intervalSeconds = sp.getInt(KEY_INTERVAL_SECONDS, 5);
-            config.format = sp.getString(KEY_FORMAT, "COMPACT");
+            if (sp.getBoolean(KEY_HAS_SAVED_CONFIG, false) || sp.contains(KEY_POSITION)) {
+                return fromPrefsInternal(sp);
+            }
+        } catch (Throwable ignored) {}
 
-            String rawPos = sp.getString(KEY_POSITION, "BATTERY_LEFT");
-            // Normalize legacy values
-            if ("LEFT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_LEFT";
-            else if ("RIGHT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_RIGHT";
-            else config.position = rawPos;
+        // 2. Try device-protected storage (Direct Boot before user unlock)
+        try {
+            Context de = context.createDeviceProtectedStorageContext();
+            SharedPreferences sp = de.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            if (sp.getBoolean(KEY_HAS_SAVED_CONFIG, false) || sp.contains(KEY_POSITION)) {
+                return fromPrefsInternal(sp);
+            }
+        } catch (Throwable ignored) {}
 
-            config.detailMode = sp.getString(KEY_DETAIL_MODE, "TIME_ONLY");
-            config.chargingSymbol = sp.getString(KEY_CHARGING_SYMBOL, "BOLT_MONO");
-            config.fontSize = sp.getFloat(KEY_FONT_SIZE, 12f);
-            config.tapToggle = sp.getBoolean(KEY_TAP_TOGGLE, true);
-            config.capacityOverrideMah = sp.getInt(KEY_CAPACITY_OVERRIDE, 0);
-        } catch (Exception e) {
-            Log.e(TAG, "Error loading SharedPreferences: " + e.getMessage());
-        }
         return config;
     }
 
     public void saveToSharedPreferences(Context context) {
-        SharedPreferences sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        if (context == null) return;
+        saveToPrefsInternal(context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE));
+        try {
+            Context de = context.createDeviceProtectedStorageContext();
+            saveToPrefsInternal(de.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE));
+        } catch (Throwable ignored) {}
+    }
+
+    public static PlayTimeConfig loadFromLocalCache(Context context) {
+        if (context == null) return null;
+        try {
+            SharedPreferences sp = context.getSharedPreferences(SYSTEMUI_CACHE_PREF, Context.MODE_PRIVATE);
+            if (sp.getBoolean(KEY_HAS_SAVED_CONFIG, false) || sp.contains(KEY_POSITION)) {
+                return fromPrefsInternal(sp);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "Failed to load from local cache: " + t.getMessage());
+        }
+        return null;
+    }
+
+    public void saveToLocalCache(Context context) {
+        if (context == null) return;
+        try {
+            SharedPreferences sp = context.getSharedPreferences(SYSTEMUI_CACHE_PREF, Context.MODE_PRIVATE);
+            saveToPrefsInternal(sp);
+        } catch (Throwable t) {
+            Log.w(TAG, "Failed to save to local cache: " + t.getMessage());
+        }
+    }
+
+    private void saveToPrefsInternal(SharedPreferences sp) {
+        if (sp == null) return;
         sp.edit()
+            .putBoolean(KEY_HAS_SAVED_CONFIG, true)
             .putBoolean(KEY_ENABLED, enabled)
             .putInt(KEY_WINDOW_MINUTES, windowMinutes)
             .putInt(KEY_INTERVAL_SECONDS, intervalSeconds)
@@ -80,8 +114,30 @@ public class PlayTimeConfig {
             .apply();
     }
 
+    private static PlayTimeConfig fromPrefsInternal(SharedPreferences sp) {
+        PlayTimeConfig config = new PlayTimeConfig();
+        config.enabled = sp.getBoolean(KEY_ENABLED, true);
+        config.windowMinutes = sp.getInt(KEY_WINDOW_MINUTES, 5);
+        config.intervalSeconds = sp.getInt(KEY_INTERVAL_SECONDS, 5);
+        config.format = sp.getString(KEY_FORMAT, "COMPACT");
+
+        String rawPos = sp.getString(KEY_POSITION, "BATTERY_LEFT");
+        if ("LEFT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_LEFT";
+        else if ("RIGHT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_RIGHT";
+        else config.position = rawPos;
+
+        config.detailMode = sp.getString(KEY_DETAIL_MODE, "TIME_ONLY");
+        config.chargingSymbol = sp.getString(KEY_CHARGING_SYMBOL, "BOLT_MONO");
+        config.fontSize = sp.getFloat(KEY_FONT_SIZE, 12f);
+        config.tapToggle = sp.getBoolean(KEY_TAP_TOGGLE, true);
+        config.capacityOverrideMah = sp.getInt(KEY_CAPACITY_OVERRIDE, 0);
+        return config;
+    }
+
     public Bundle toBundle() {
         Bundle b = new Bundle();
+        b.putBoolean(KEY_IS_VALID, true);
+        b.putBoolean(KEY_HAS_SAVED_CONFIG, true);
         b.putBoolean(KEY_ENABLED, enabled);
         b.putInt(KEY_WINDOW_MINUTES, windowMinutes);
         b.putInt(KEY_INTERVAL_SECONDS, intervalSeconds);
@@ -117,28 +173,33 @@ public class PlayTimeConfig {
     }
 
     public void sendUpdateBroadcast(Context context) {
-        Intent intent = new Intent(ACTION_UPDATE_CONFIG);
-        intent.putExtras(toBundle());
-        intent.setPackage("com.android.systemui");
-        context.sendBroadcast(intent);
+        if (context == null) return;
+        try {
+            Intent intent = new Intent(ACTION_UPDATE_CONFIG);
+            intent.putExtras(toBundle());
+            intent.setPackage("com.android.systemui");
+            context.sendBroadcast(intent);
 
-        Intent globalIntent = new Intent(ACTION_UPDATE_CONFIG);
-        globalIntent.putExtras(toBundle());
-        context.sendBroadcast(globalIntent);
+            Intent globalIntent = new Intent(ACTION_UPDATE_CONFIG);
+            globalIntent.putExtras(toBundle());
+            context.sendBroadcast(globalIntent);
+        } catch (Throwable t) {
+            Log.w(TAG, "Failed to send update broadcast: " + t.getMessage());
+        }
     }
 
     public static PlayTimeConfig loadFromProvider(Context context) {
-        if (context == null) return new PlayTimeConfig();
+        if (context == null) return null;
         try {
             Bundle res = context.getContentResolver().call(
                 CONTENT_URI, METHOD_GET_CONFIG, null, null
             );
-            if (res != null) {
+            if (res != null && res.getBoolean(KEY_IS_VALID, false)) {
                 return fromBundle(res);
             }
         } catch (Throwable t) {
             Log.w(TAG, "Failed to load config from ContentProvider: " + t.getMessage());
         }
-        return new PlayTimeConfig();
+        return null;
     }
 }
