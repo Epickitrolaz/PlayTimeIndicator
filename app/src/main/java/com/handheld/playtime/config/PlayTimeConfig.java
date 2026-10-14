@@ -5,7 +5,14 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.util.Log;
+
+import org.json.JSONObject;
+
+import java.io.File;
+
+import de.robv.android.xposed.XSharedPreferences;
 
 public class PlayTimeConfig {
     private static final String TAG = "PlayTimeConfig";
@@ -16,6 +23,7 @@ public class PlayTimeConfig {
     public static final String AUTHORITY = "com.handheld.playtime.provider";
     public static final Uri CONTENT_URI = Uri.parse("content://" + AUTHORITY);
     public static final String METHOD_GET_CONFIG = "getConfig";
+    public static final String SETTING_GLOBAL_KEY = "playtime_indicator_config";
 
     public static final String KEY_IS_VALID = "is_valid";
     public static final String KEY_HAS_SAVED_CONFIG = "has_saved_config";
@@ -41,6 +49,114 @@ public class PlayTimeConfig {
     public boolean tapToggle = true;
     public int capacityOverrideMah = 0; // 0 = auto-detect
 
+    public String toJson() {
+        try {
+            JSONObject obj = new JSONObject();
+            obj.put(KEY_ENABLED, enabled);
+            obj.put(KEY_WINDOW_MINUTES, windowMinutes);
+            obj.put(KEY_INTERVAL_SECONDS, intervalSeconds);
+            obj.put(KEY_FORMAT, format);
+            obj.put(KEY_POSITION, position);
+            obj.put(KEY_DETAIL_MODE, detailMode);
+            obj.put(KEY_CHARGING_SYMBOL, chargingSymbol);
+            obj.put(KEY_FONT_SIZE, (double) fontSize);
+            obj.put(KEY_TAP_TOGGLE, tapToggle);
+            obj.put(KEY_CAPACITY_OVERRIDE, capacityOverrideMah);
+            return obj.toString();
+        } catch (Throwable t) {
+            Log.e(TAG, "Error serializing config to JSON", t);
+            return "";
+        }
+    }
+
+    public static PlayTimeConfig fromJson(String jsonStr) {
+        if (jsonStr == null || jsonStr.trim().isEmpty()) return null;
+        try {
+            JSONObject obj = new JSONObject(jsonStr);
+            PlayTimeConfig config = new PlayTimeConfig();
+            config.enabled = obj.optBoolean(KEY_ENABLED, true);
+            config.windowMinutes = obj.optInt(KEY_WINDOW_MINUTES, 5);
+            config.intervalSeconds = obj.optInt(KEY_INTERVAL_SECONDS, 5);
+            config.format = obj.optString(KEY_FORMAT, "COMPACT");
+
+            String rawPos = obj.optString(KEY_POSITION, "BATTERY_LEFT");
+            if ("LEFT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_LEFT";
+            else if ("RIGHT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_RIGHT";
+            else config.position = rawPos;
+
+            config.detailMode = obj.optString(KEY_DETAIL_MODE, "TIME_ONLY");
+            config.chargingSymbol = obj.optString(KEY_CHARGING_SYMBOL, "BOLT_MONO");
+            config.fontSize = (float) obj.optDouble(KEY_FONT_SIZE, 12.0);
+            config.tapToggle = obj.optBoolean(KEY_TAP_TOGGLE, true);
+            config.capacityOverrideMah = obj.optInt(KEY_CAPACITY_OVERRIDE, 0);
+            return config;
+        } catch (Throwable t) {
+            Log.e(TAG, "Error parsing config from JSON", t);
+            return null;
+        }
+    }
+
+    public static PlayTimeConfig loadFromSettingsGlobal(Context context) {
+        if (context == null) return null;
+        try {
+            String val = Settings.Global.getString(context.getContentResolver(), SETTING_GLOBAL_KEY);
+            if (val != null && !val.trim().isEmpty()) {
+                PlayTimeConfig cfg = fromJson(val);
+                if (cfg != null) {
+                    Log.i(TAG, "Loaded config from Settings.Global: pos=" + cfg.position + ", detail=" + cfg.detailMode);
+                    return cfg;
+                }
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "Failed to load from Settings.Global: " + t.getMessage());
+        }
+        return null;
+    }
+
+    public static boolean saveToSettingsGlobal(Context context, PlayTimeConfig config) {
+        if (context == null || config == null) return false;
+        try {
+            String json = config.toJson();
+            boolean ok = Settings.Global.putString(context.getContentResolver(), SETTING_GLOBAL_KEY, json);
+            Log.i(TAG, "Saved config to Settings.Global (success=" + ok + "): " + json);
+            return ok;
+        } catch (Throwable t) {
+            Log.w(TAG, "Failed to save to Settings.Global: " + t.getMessage());
+            return false;
+        }
+    }
+
+    public static PlayTimeConfig loadFromXposedPrefs() {
+        try {
+            XSharedPreferences xsp = new XSharedPreferences("com.handheld.playtime", PREF_NAME);
+            xsp.makeWorldReadable();
+            xsp.reload();
+            if (xsp.contains(KEY_POSITION) || xsp.getBoolean(KEY_HAS_SAVED_CONFIG, false)) {
+                PlayTimeConfig config = new PlayTimeConfig();
+                config.enabled = xsp.getBoolean(KEY_ENABLED, true);
+                config.windowMinutes = xsp.getInt(KEY_WINDOW_MINUTES, 5);
+                config.intervalSeconds = xsp.getInt(KEY_INTERVAL_SECONDS, 5);
+                config.format = xsp.getString(KEY_FORMAT, "COMPACT");
+
+                String rawPos = xsp.getString(KEY_POSITION, "BATTERY_LEFT");
+                if ("LEFT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_LEFT";
+                else if ("RIGHT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_RIGHT";
+                else config.position = rawPos;
+
+                config.detailMode = xsp.getString(KEY_DETAIL_MODE, "TIME_ONLY");
+                config.chargingSymbol = xsp.getString(KEY_CHARGING_SYMBOL, "BOLT_MONO");
+                config.fontSize = xsp.getFloat(KEY_FONT_SIZE, 12f);
+                config.tapToggle = xsp.getBoolean(KEY_TAP_TOGGLE, true);
+                config.capacityOverrideMah = xsp.getInt(KEY_CAPACITY_OVERRIDE, 0);
+                Log.i(TAG, "Loaded config from XSharedPreferences: pos=" + config.position);
+                return config;
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "Failed to load from XSharedPreferences: " + t.getMessage());
+        }
+        return null;
+    }
+
     public static PlayTimeConfig fromSharedPreferences(Context context) {
         PlayTimeConfig config = new PlayTimeConfig();
         if (context == null) return config;
@@ -53,7 +169,7 @@ public class PlayTimeConfig {
             }
         } catch (Throwable ignored) {}
 
-        // 2. Try device-protected storage (Direct Boot before user unlock)
+        // 2. Try device-protected storage (Direct Boot)
         try {
             Context de = context.createDeviceProtectedStorageContext();
             SharedPreferences sp = de.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
@@ -71,6 +187,29 @@ public class PlayTimeConfig {
         try {
             Context de = context.createDeviceProtectedStorageContext();
             saveToPrefsInternal(de.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE));
+        } catch (Throwable ignored) {}
+
+        makePrefsFilesWorldReadable(context);
+    }
+
+    private static void makePrefsFilesWorldReadable(Context context) {
+        try {
+            File ceDir = new File(context.getApplicationInfo().dataDir, "shared_prefs");
+            ceDir.setReadable(true, false);
+            ceDir.setExecutable(true, false);
+            File ceFile = new File(ceDir, PREF_NAME + ".xml");
+            if (ceFile.exists()) {
+                ceFile.setReadable(true, false);
+            }
+
+            Context de = context.createDeviceProtectedStorageContext();
+            File deDir = new File(de.getDataDir(), "shared_prefs");
+            deDir.setReadable(true, false);
+            deDir.setExecutable(true, false);
+            File deFile = new File(deDir, PREF_NAME + ".xml");
+            if (deFile.exists()) {
+                deFile.setReadable(true, false);
+            }
         } catch (Throwable ignored) {}
     }
 
@@ -111,7 +250,7 @@ public class PlayTimeConfig {
             .putFloat(KEY_FONT_SIZE, fontSize)
             .putBoolean(KEY_TAP_TOGGLE, tapToggle)
             .putInt(KEY_CAPACITY_OVERRIDE, capacityOverrideMah)
-            .apply();
+            .commit(); // Synchronous commit to ensure file is on disk
     }
 
     private static PlayTimeConfig fromPrefsInternal(SharedPreferences sp) {
@@ -148,12 +287,17 @@ public class PlayTimeConfig {
         b.putFloat(KEY_FONT_SIZE, fontSize);
         b.putBoolean(KEY_TAP_TOGGLE, tapToggle);
         b.putInt(KEY_CAPACITY_OVERRIDE, capacityOverrideMah);
+        b.putString("json", toJson());
         return b;
     }
 
     public static PlayTimeConfig fromBundle(Bundle b) {
+        if (b == null) return new PlayTimeConfig();
+        if (b.containsKey("json")) {
+            PlayTimeConfig fromJ = fromJson(b.getString("json"));
+            if (fromJ != null) return fromJ;
+        }
         PlayTimeConfig config = new PlayTimeConfig();
-        if (b == null) return config;
         config.enabled = b.getBoolean(KEY_ENABLED, true);
         config.windowMinutes = b.getInt(KEY_WINDOW_MINUTES, 5);
         config.intervalSeconds = b.getInt(KEY_INTERVAL_SECONDS, 5);

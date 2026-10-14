@@ -22,6 +22,18 @@ public class BootReceiver extends BroadcastReceiver {
             try {
                 PlayTimeConfig config = PlayTimeConfig.fromSharedPreferences(context);
                 config.sendUpdateBroadcast(context);
+
+                // Also try saving to Settings.Global via root shell if device has root
+                try {
+                    String json = config.toJson();
+                    if (json != null && !json.isEmpty()) {
+                        String escaped = json.replace("'", "'\\''");
+                        Runtime.getRuntime().exec(new String[]{
+                            "su", "-c", "settings put global " + PlayTimeConfig.SETTING_GLOBAL_KEY + " '" + escaped + "'"
+                        });
+                    }
+                } catch (Throwable ignored) {}
+
                 Log.i(TAG, "Dispatched boot config to SystemUI: pos=" + config.position + ", detail=" + config.detailMode);
             } catch (Throwable t) {
                 Log.e(TAG, "Error in BootReceiver dispatch: " + t.getMessage(), t);

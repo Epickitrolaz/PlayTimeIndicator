@@ -41,6 +41,7 @@ public class SystemUIHook implements IXposedHookLoadPackage {
     private final Set<View> mBatteryViews = Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
 
     private PlayTimeConfig mConfig = new PlayTimeConfig();
+    private boolean mConfigLoaded = false;
     private PlayTimeEstimator mEstimator;
     private BatteryReader mBatteryReader;
     private Context mAppContext;
@@ -58,7 +59,6 @@ public class SystemUIHook implements IXposedHookLoadPackage {
     private int mCurrentTint = Color.WHITE;
     private int mMetricMode = 0; // 0: Configured, 1: Watts, 2: Volts, 3: Battery %
     private boolean mReceiversRegistered = false;
-    private boolean mProviderSynced = false;
 
     private static void logI(String msg) {
         Log.i(TAG, msg);
@@ -363,24 +363,33 @@ public class SystemUIHook implements IXposedHookLoadPackage {
 
         mAppContext = context.getApplicationContext() != null ? context.getApplicationContext() : context;
 
-        // 1. Immediately load from SystemUI's local cache on disk.
-        // This is 100% available at the exact millisecond of boot, with zero IPC delay!
-        PlayTimeConfig cached = PlayTimeConfig.loadFromLocalCache(mAppContext);
-        if (cached != null) {
-            mConfig = cached;
-            logI("Loaded saved config from SystemUI local cache: pos=" + mConfig.position + ", detail=" + mConfig.detailMode + ", symbol=" + mConfig.chargingSymbol);
+        // TIER 1: Native Android Settings.Global (100% persistent across reboots, 0ms boot latency)
+        PlayTimeConfig loaded = PlayTimeConfig.loadFromSettingsGlobal(mAppContext);
+
+        // TIER 2: XSharedPreferences via LSPosed/Vector bridge
+        if (loaded == null) {
+            loaded = PlayTimeConfig.loadFromXposedPrefs();
+        }
+
+        // TIER 3: Local disk cache in SystemUI's private storage
+        if (loaded == null) {
+            loaded = PlayTimeConfig.loadFromLocalCache(mAppContext);
+        }
+
+        // TIER 4: ContentProvider
+        if (loaded == null) {
+            loaded = PlayTimeConfig.loadFromProvider(mAppContext);
+        }
+
+        if (loaded != null) {
+            mConfig = loaded;
+            mConfigLoaded = true;
+            PlayTimeConfig.saveToSettingsGlobal(mAppContext, mConfig);
+            logI("Active config successfully loaded on boot: pos=" + mConfig.position + ", detail=" + mConfig.detailMode + ", symbol=" + mConfig.chargingSymbol);
         } else {
-            // 2. If no cache exists yet (first boot after install), try querying the ContentProvider
-            PlayTimeConfig fromProv = PlayTimeConfig.loadFromProvider(mAppContext);
-            if (fromProv != null) {
-                mConfig = fromProv;
-                mConfig.saveToLocalCache(mAppContext);
-                mProviderSynced = true;
-                logI("Loaded config from ContentProvider: pos=" + mConfig.position);
-            } else {
-                mConfig = new PlayTimeConfig();
-                logI("Using default config (provider unavailable and no cache yet)");
-            }
+            mConfig = new PlayTimeConfig();
+            mConfigLoaded = false;
+            logI("No saved config found yet; using defaults until first sync");
         }
 
         mBatteryReader = new BatteryReader(mAppContext);
@@ -607,11 +616,12 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                 String action = intent.getAction();
                 if (PlayTimeConfig.ACTION_UPDATE_CONFIG.equals(action)) {
                     mConfig = PlayTimeConfig.fromBundle(intent.getExtras());
+                    mConfigLoaded = true;
                     if (mAppContext != null) {
+                        PlayTimeConfig.saveToSettingsGlobal(mAppContext, mConfig);
                         mConfig.saveToLocalCache(mAppContext);
                     }
-                    mProviderSynced = true;
-                    logI("Received config update! pos=" + mConfig.position + ", detail=" + mConfig.detailMode + ", chg=" + mConfig.chargingSymbol);
+                    logI("Received config update! Saved to Settings.Global: pos=" + mConfig.position + ", detail=" + mConfig.detailMode + ", chg=" + mConfig.chargingSymbol);
                     applyPositionAndText();
                 } else if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_USER_PRESENT.equals(action)) {
                     syncConfigFromProviderAsync();
@@ -638,16 +648,35 @@ public class SystemUIHook implements IXposedHookLoadPackage {
         if (mWorkerHandler != null && mAppContext != null) {
             mWorkerHandler.post(() -> {
                 try {
+                    // Check Settings.Global
+                    PlayTimeConfig global = PlayTimeConfig.loadFromSettingsGlobal(mAppContext);
+                    if (global != null) {
+                        mConfig = global;
+                        mConfigLoaded = true;
+                        mMainHandler.post(() -> applyPositionAndText());
+                        return;
+                    }
+                    // Check XSharedPreferences
+                    PlayTimeConfig xsp = PlayTimeConfig.loadFromXposedPrefs();
+                    if (xsp != null) {
+                        mConfig = xsp;
+                        mConfigLoaded = true;
+                        PlayTimeConfig.saveToSettingsGlobal(mAppContext, mConfig);
+                        mMainHandler.post(() -> applyPositionAndText());
+                        return;
+                    }
+                    // Check ContentProvider
                     PlayTimeConfig fromProv = PlayTimeConfig.loadFromProvider(mAppContext);
                     if (fromProv != null) {
                         mConfig = fromProv;
+                        mConfigLoaded = true;
+                        PlayTimeConfig.saveToSettingsGlobal(mAppContext, mConfig);
                         mConfig.saveToLocalCache(mAppContext);
-                        mProviderSynced = true;
                         logI("Synced config from provider on boot/unlock: pos=" + mConfig.position);
                         mMainHandler.post(() -> applyPositionAndText());
                     }
                 } catch (Throwable t) {
-                    logE("Failed to sync config from provider", t);
+                    logE("Failed to sync config asynchronously", t);
                 }
             });
         }
@@ -668,15 +697,8 @@ public class SystemUIHook implements IXposedHookLoadPackage {
             @Override
             public void run() {
                 try {
-                    if (!mProviderSynced && mAppContext != null) {
-                        PlayTimeConfig fromProv = PlayTimeConfig.loadFromProvider(mAppContext);
-                        if (fromProv != null) {
-                            mConfig = fromProv;
-                            mConfig.saveToLocalCache(mAppContext);
-                            mProviderSynced = true;
-                            logI("Successfully synced config from ContentProvider in worker loop");
-                            mMainHandler.post(() -> applyPositionAndText());
-                        }
+                    if (!mConfigLoaded && mAppContext != null) {
+                        syncConfigFromProviderAsync();
                     }
 
                     if (mEstimator != null && mConfig != null) {

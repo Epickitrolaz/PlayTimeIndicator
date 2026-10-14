@@ -1,21 +1,21 @@
 package com.handheld.playtime;
 
+import android.content.Context;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
-import com.google.android.material.switchmaterial.SwitchMaterial;
-import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.handheld.playtime.battery.BatteryReader;
 import com.handheld.playtime.battery.PlayTimeEstimator;
 import com.handheld.playtime.config.PlayTimeConfig;
@@ -23,6 +23,10 @@ import com.handheld.playtime.config.PlayTimeConfig;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
+
+    private PlayTimeConfig mConfig;
+    private BatteryReader mBatteryReader;
+    private PlayTimeEstimator mEstimator;
 
     private MaterialCardView mCardStatus;
     private TextView mTvStatusTitle;
@@ -33,20 +37,17 @@ public class MainActivity extends AppCompatActivity {
     private TextView mTvLiveVoltage;
     private TextView mTvLiveEstimate;
 
-    private SwitchMaterial mSwitchEnabled;
+    private MaterialSwitch mSwitchEnabled;
     private Spinner mSpinnerPosition;
     private Spinner mSpinnerDetailMode;
     private Spinner mSpinnerChargingSymbol;
     private Spinner mSpinnerFormat;
-    private SwitchMaterial mSwitchTapToggle;
+    private MaterialSwitch mSwitchTapToggle;
     private Spinner mSpinnerWindow;
     private Spinner mSpinnerInterval;
-    private TextInputEditText mEtCapacityOverride;
-    private MaterialButton mBtnApply;
+    private EditText mEtCapacityOverride;
+    private Button mBtnApply;
 
-    private PlayTimeConfig mConfig;
-    private BatteryReader mBatteryReader;
-    private PlayTimeEstimator mEstimator;
     private Handler mDiagHandler;
     private Runnable mDiagRunnable;
 
@@ -241,7 +242,23 @@ public class MainActivity extends AppCompatActivity {
         mConfig.saveToSharedPreferences(this);
         mConfig.sendUpdateBroadcast(this);
 
+        // Also save to Settings.Global via root shell as an extra guarantee
+        saveToSettingsGlobalViaRootAsync(mConfig.toJson());
+
         Toast.makeText(this, R.string.toast_applied, Toast.LENGTH_SHORT).show();
+    }
+
+    private void saveToSettingsGlobalViaRootAsync(String json) {
+        if (json == null || json.isEmpty()) return;
+        new Thread(() -> {
+            try {
+                String escaped = json.replace("'", "'\\''");
+                Process process = Runtime.getRuntime().exec(new String[]{
+                    "su", "-c", "settings put global " + PlayTimeConfig.SETTING_GLOBAL_KEY + " '" + escaped + "'"
+                });
+                process.waitFor();
+            } catch (Throwable ignored) {}
+        }).start();
     }
 
     private void updateStatusCard() {
