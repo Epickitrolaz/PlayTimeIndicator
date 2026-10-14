@@ -79,7 +79,7 @@ The project uses Gradle with Java 17+ and the Android Gradle Plugin.
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/Epickitrolaz/PlayTimeIndicator
 cd PlayTimeIndicator
 
 # Run unit tests
