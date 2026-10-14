@@ -31,6 +31,7 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XC_MethodReplacement;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.XSharedPreferences;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class SystemUIHook implements IXposedHookLoadPackage {
@@ -358,6 +359,37 @@ public class SystemUIHook implements IXposedHookLoadPackage {
         });
     }
 
+    private PlayTimeConfig loadXSharedPreferencesConfig() {
+        try {
+            XSharedPreferences xsp = new XSharedPreferences("com.handheld.playtime", PlayTimeConfig.PREF_NAME);
+            xsp.makeWorldReadable();
+            xsp.reload();
+            if (xsp.contains(PlayTimeConfig.KEY_POSITION) || xsp.getBoolean(PlayTimeConfig.KEY_HAS_SAVED_CONFIG, false)) {
+                PlayTimeConfig config = new PlayTimeConfig();
+                config.enabled = xsp.getBoolean(PlayTimeConfig.KEY_ENABLED, true);
+                config.windowMinutes = xsp.getInt(PlayTimeConfig.KEY_WINDOW_MINUTES, 5);
+                config.intervalSeconds = xsp.getInt(PlayTimeConfig.KEY_INTERVAL_SECONDS, 5);
+                config.format = xsp.getString(PlayTimeConfig.KEY_FORMAT, "COMPACT");
+
+                String rawPos = xsp.getString(PlayTimeConfig.KEY_POSITION, "BATTERY_LEFT");
+                if ("LEFT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_LEFT";
+                else if ("RIGHT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_RIGHT";
+                else config.position = rawPos;
+
+                config.detailMode = xsp.getString(PlayTimeConfig.KEY_DETAIL_MODE, "TIME_ONLY");
+                config.chargingSymbol = xsp.getString(PlayTimeConfig.KEY_CHARGING_SYMBOL, "BOLT_MONO");
+                config.fontSize = xsp.getFloat(PlayTimeConfig.KEY_FONT_SIZE, 12f);
+                config.tapToggle = xsp.getBoolean(PlayTimeConfig.KEY_TAP_TOGGLE, true);
+                config.capacityOverrideMah = xsp.getInt(PlayTimeConfig.KEY_CAPACITY_OVERRIDE, 0);
+                logI("Loaded config from XSharedPreferences: pos=" + config.position);
+                return config;
+            }
+        } catch (Throwable t) {
+            logE("XSharedPreferences load failed", t);
+        }
+        return null;
+    }
+
     private synchronized void initServicesIfNeeded(Context context) {
         if (context == null || mAppContext != null) return;
 
@@ -368,7 +400,7 @@ public class SystemUIHook implements IXposedHookLoadPackage {
 
         // TIER 2: XSharedPreferences via LSPosed/Vector bridge
         if (loaded == null) {
-            loaded = PlayTimeConfig.loadFromXposedPrefs();
+            loaded = loadXSharedPreferencesConfig();
         }
 
         // TIER 3: Local disk cache in SystemUI's private storage
@@ -657,7 +689,7 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                         return;
                     }
                     // Check XSharedPreferences
-                    PlayTimeConfig xsp = PlayTimeConfig.loadFromXposedPrefs();
+                    PlayTimeConfig xsp = loadXSharedPreferencesConfig();
                     if (xsp != null) {
                         mConfig = xsp;
                         mConfigLoaded = true;

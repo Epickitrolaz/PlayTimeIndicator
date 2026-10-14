@@ -12,8 +12,6 @@ import org.json.JSONObject;
 
 import java.io.File;
 
-import de.robv.android.xposed.XSharedPreferences;
-
 public class PlayTimeConfig {
     private static final String TAG = "PlayTimeConfig";
 
@@ -126,37 +124,6 @@ public class PlayTimeConfig {
         }
     }
 
-    public static PlayTimeConfig loadFromXposedPrefs() {
-        try {
-            XSharedPreferences xsp = new XSharedPreferences("com.handheld.playtime", PREF_NAME);
-            xsp.makeWorldReadable();
-            xsp.reload();
-            if (xsp.contains(KEY_POSITION) || xsp.getBoolean(KEY_HAS_SAVED_CONFIG, false)) {
-                PlayTimeConfig config = new PlayTimeConfig();
-                config.enabled = xsp.getBoolean(KEY_ENABLED, true);
-                config.windowMinutes = xsp.getInt(KEY_WINDOW_MINUTES, 5);
-                config.intervalSeconds = xsp.getInt(KEY_INTERVAL_SECONDS, 5);
-                config.format = xsp.getString(KEY_FORMAT, "COMPACT");
-
-                String rawPos = xsp.getString(KEY_POSITION, "BATTERY_LEFT");
-                if ("LEFT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_LEFT";
-                else if ("RIGHT".equalsIgnoreCase(rawPos)) config.position = "BATTERY_RIGHT";
-                else config.position = rawPos;
-
-                config.detailMode = xsp.getString(KEY_DETAIL_MODE, "TIME_ONLY");
-                config.chargingSymbol = xsp.getString(KEY_CHARGING_SYMBOL, "BOLT_MONO");
-                config.fontSize = xsp.getFloat(KEY_FONT_SIZE, 12f);
-                config.tapToggle = xsp.getBoolean(KEY_TAP_TOGGLE, true);
-                config.capacityOverrideMah = xsp.getInt(KEY_CAPACITY_OVERRIDE, 0);
-                Log.i(TAG, "Loaded config from XSharedPreferences: pos=" + config.position);
-                return config;
-            }
-        } catch (Throwable t) {
-            Log.w(TAG, "Failed to load from XSharedPreferences: " + t.getMessage());
-        }
-        return null;
-    }
-
     public static PlayTimeConfig fromSharedPreferences(Context context) {
         PlayTimeConfig config = new PlayTimeConfig();
         if (context == null) return config;
@@ -177,6 +144,12 @@ public class PlayTimeConfig {
                 return fromPrefsInternal(sp);
             }
         } catch (Throwable ignored) {}
+
+        // 3. Fallback to Settings.Global if available
+        PlayTimeConfig fromGlobal = loadFromSettingsGlobal(context);
+        if (fromGlobal != null) {
+            return fromGlobal;
+        }
 
         return config;
     }
@@ -250,7 +223,7 @@ public class PlayTimeConfig {
             .putFloat(KEY_FONT_SIZE, fontSize)
             .putBoolean(KEY_TAP_TOGGLE, tapToggle)
             .putInt(KEY_CAPACITY_OVERRIDE, capacityOverrideMah)
-            .commit(); // Synchronous commit to ensure file is on disk
+            .commit(); // Synchronous commit to ensure file is written to disk
     }
 
     private static PlayTimeConfig fromPrefsInternal(SharedPreferences sp) {

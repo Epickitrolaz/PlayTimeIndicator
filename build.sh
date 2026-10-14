@@ -9,18 +9,18 @@ export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 cd "$DIR"
 
 echo "=== Running Unit Tests ==="
-./gradlew testDebugUnitTest
+./gradlew testDebugUnitTest --no-daemon
 
 echo "=== Building Debug APK ==="
-./gradlew assembleDebug
+./gradlew assembleDebug --no-daemon
 
 echo "=== Building Release APK ==="
-./gradlew assembleRelease
+./gradlew assembleRelease --no-daemon
 
 cp "$DIR/app/build/outputs/apk/debug/app-debug.apk" "$DIR/PlayTimeIndicator-debug.apk"
-cp "$DIR/app/build/outputs/apk/release/app-release.apk" "$DIR/PlayTimeIndicator-v1.0.0.apk"
-ln -sf "$DIR/PlayTimeIndicator-v1.0.0.apk" "$DIR/PlayTimeIndicator-release.apk"
+cp "$DIR/app/build/outputs/apk/release/app-release.apk" "$DIR/PlayTimeIndicator-v1.1.0.apk"
+ln -sf "$DIR/PlayTimeIndicator-v1.1.0.apk" "$DIR/PlayTimeIndicator-release.apk"
 
 echo "=== Build Complete! ==="
 echo "Debug APK:   $DIR/PlayTimeIndicator-debug.apk"
-echo "Release APK: $DIR/PlayTimeIndicator-v1.0.0.apk"
+echo "Release APK: $DIR/PlayTimeIndicator-v1.1.0.apk"
