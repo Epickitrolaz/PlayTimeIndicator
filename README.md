@@ -14,7 +14,8 @@ Stock Android's battery prediction calculates battery life based on historical a
 ## ✨ Features
 
 - **Active-Only Rolling Window (1, 3, 5, or 10 min):**
-  - Ignores idle sleep drain completely (`ACTION_SCREEN_OFF` pauses sampling and purges stale sleep data).
+  - Instant start upon device unlock/screen-on; displays a rough estimate after the first refresh interval (default 5s) and continuously refines accuracy as the rolling window fills.
+  - Ignores idle sleep drain completely (`ACTION_SCREEN_OFF` pauses sampling and purges stale sleep data upon wake/unlock).
   - Rapidly adapts when switching between low-power retro emulators (~2W / ~8h) and heavy Switch/PS2 3D emulation (~12W / ~2h).
 - **Flexible Status Bar Placement:**
   - **Left of Battery**

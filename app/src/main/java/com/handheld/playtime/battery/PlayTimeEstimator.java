@@ -48,11 +48,12 @@ public class PlayTimeEstimator {
         if (!screenOn) {
             mLastScreenOffTime = now;
         } else {
-            // If screen was off for more than 60 seconds (handheld was asleep),
-            // clear stale samples so we immediately calibrate to the new active game
-            if (mLastScreenOffTime > 0 && (now - mLastScreenOffTime) > 60_000) {
+            // When screen turns on / device wakes up, clear stale samples
+            // so we immediately start counting fresh for the new active session
+            if (mLastScreenOffTime > 0) {
                 mSamples.clear();
-                Log.d(TAG, "Screen woke from sleep: cleared stale samples for fresh window");
+                Log.d(TAG, "Screen unlocked / woke up: cleared stale samples for instant fresh counting");
+                mLastScreenOffTime = 0;
             }
         }
     }
@@ -61,7 +62,7 @@ public class PlayTimeEstimator {
      * Polls the current hardware power draw and adds to the rolling active window.
      */
     public synchronized void recordSample(PlayTimeConfig config) {
-        if (!mScreenOn) {
+        if (!mScreenOn || mReader == null) {
             return;
         }
 
@@ -84,7 +85,7 @@ public class PlayTimeEstimator {
         long now = mClock.elapsedRealtime();
         mSamples.addLast(new Sample(now, currentMa));
 
-        long windowMs = config.windowMinutes * 60_000L;
+        long windowMs = (config != null ? config.windowMinutes : 5) * 60_000L;
 
         while (!mSamples.isEmpty() && (now - mSamples.peekFirst().timestampMs) > windowMs) {
             mSamples.removeFirst();
@@ -96,7 +97,7 @@ public class PlayTimeEstimator {
      */
     public synchronized int getAverageCurrentMa() {
         if (mSamples.isEmpty()) {
-            return mReader.getCurrentMa();
+            return mReader != null ? mReader.getCurrentMa() : 0;
         }
 
         long sum = 0;
@@ -108,16 +109,19 @@ public class PlayTimeEstimator {
 
     /**
      * Returns remaining active play time in minutes.
+     * Returns -1 if no samples are available yet (initial interval in progress) or power draw <= 20mA.
      */
     public int getRemainingPlayTimeMinutes(PlayTimeConfig config) {
-        int avgMa = getAverageCurrentMa();
-        if (avgMa <= 20) {
-            // Cold-start fallback: estimate based on percentage until hardware current arrives
-            int pct = mReader.getBatteryLevelPercent();
-            return Math.max(1, (pct * 270) / 100);
+        if (mSamples.isEmpty()) {
+            return -1;
         }
 
-        int remainingMah = mReader.getRemainingCapacityMah(config.capacityOverrideMah);
+        int avgMa = getAverageCurrentMa();
+        if (avgMa <= 20) {
+            return -1;
+        }
+
+        int remainingMah = mReader != null ? mReader.getRemainingCapacityMah(config != null ? config.capacityOverrideMah : 0) : 0;
         return (int) (((long) remainingMah * 60) / avgMa);
     }
 
@@ -126,9 +130,9 @@ public class PlayTimeEstimator {
      * @param overrideMode 0: Default configured detail mode, 1: Watts only, 2: Volts only, 3: Battery %
      */
     public String getFormattedDisplay(PlayTimeConfig config, int overrideMode) {
-        boolean charging = mReader.isCharging();
+        boolean charging = mReader != null && mReader.isCharging();
         int currentMa = getAverageCurrentMa();
-        int mv = mReader.getVoltageMv();
+        int mv = mReader != null ? mReader.getVoltageMv() : 3800;
         float volts = mv / 1000f;
         float watts = (currentMa * volts) / 1000f;
 
@@ -138,13 +142,13 @@ public class PlayTimeEstimator {
         } else if (overrideMode == 2) {
             return String.format(Locale.US, "%.2fV", volts);
         } else if (overrideMode == 3) {
-            return mReader.getBatteryLevelPercent() + "%";
+            return (mReader != null ? mReader.getBatteryLevelPercent() : 0) + "%";
         }
 
         // Determine non-color or custom charging symbol prefix
         String chgPrefix = "";
         if (charging) {
-            String sym = config.chargingSymbol != null ? config.chargingSymbol : "BOLT_MONO";
+            String sym = config != null && config.chargingSymbol != null ? config.chargingSymbol : "BOLT_MONO";
             switch (sym) {
                 case "PLUS":
                     chgPrefix = "+";
@@ -165,24 +169,26 @@ public class PlayTimeEstimator {
         // Compute time component
         String timeStr;
         if (charging) {
-            if (currentMa > 100) {
-                int totalMah = config.capacityOverrideMah > 0 ? config.capacityOverrideMah : 5000;
-                int remainingMah = mReader.getRemainingCapacityMah(config.capacityOverrideMah);
+            if (mSamples.isEmpty()) {
+                timeStr = chgPrefix.trim();
+            } else if (currentMa > 100) {
+                int totalMah = config != null && config.capacityOverrideMah > 0 ? config.capacityOverrideMah : 5000;
+                int remainingMah = mReader != null ? mReader.getRemainingCapacityMah(config != null ? config.capacityOverrideMah : 0) : 0;
                 int neededMah = Math.max(0, totalMah - remainingMah);
                 int minsToFull = (int) (((long) neededMah * 60) / currentMa);
-                timeStr = chgPrefix + formatTime(minsToFull, config.format);
+                timeStr = chgPrefix + formatTime(minsToFull, config != null ? config.format : "COMPACT");
             } else {
                 timeStr = chgPrefix.trim();
             }
         } else {
             int remainingMinutes = getRemainingPlayTimeMinutes(config);
-            timeStr = formatTime(remainingMinutes, config.format);
+            timeStr = formatTime(remainingMinutes, config != null ? config.format : "COMPACT");
         }
 
         String wattsStr = formatWatts(watts, charging);
         String voltsStr = String.format(Locale.US, "%.2fV", volts);
 
-        String mode = config.detailMode != null ? config.detailMode : "TIME_ONLY";
+        String mode = config != null && config.detailMode != null ? config.detailMode : "TIME_ONLY";
         switch (mode) {
             case "TIME_WATTS":
                 return timeStr + " · " + wattsStr;
@@ -245,5 +251,7 @@ public class PlayTimeEstimator {
 
     public synchronized void reset() {
         mSamples.clear();
+        mLastScreenOffTime = 0;
+        Log.d(TAG, "Estimator reset: cleared samples for instant fresh counting");
     }
 }

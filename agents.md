@@ -83,7 +83,8 @@ It solves the problem of stock Android battery estimations factoring in hours of
 
 ### 3.3. Estimation Algorithm (`PlayTimeEstimator.java`)
 - **Rolling Window:** Stores timestamped `PowerSample` entries over a configurable window (1, 3, 5, or 10 minutes).
-- **Active-Only Invalidation:** When `ACTION_SCREEN_OFF` is triggered, old samples are purged so standby idle time does not skew gameplay estimates.
+- **Active-Only Invalidation:** When `ACTION_SCREEN_OFF` or screen lock is triggered, old samples are purged upon wake/unlock so standby idle time does not skew gameplay estimates.
+- **Instant Counting & Rough Estimate:** When a device is unlocked (screen turns on), active counting begins instantly. A rough estimate is displayed after the first interval (default 5s) and gradually refines in accuracy over the rolling window.
 - **Estimates:**
   - **Discharging:** $T_{\text{remaining}} = \frac{\text{Current Capacity (mAh)}}{\text{Rolling Average Discharge Rate (mA)}}$
   - **Charging:** $T_{\text{to\_full}} = \frac{\text{Max Capacity} - \text{Current Capacity}}{\text{Rolling Average Charge Rate (mA)}}$

@@ -655,14 +655,27 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                     }
                     logI("Received config update! Saved to Settings.Global: pos=" + mConfig.position + ", detail=" + mConfig.detailMode + ", chg=" + mConfig.chargingSymbol);
                     applyPositionAndText();
-                } else if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_USER_PRESENT.equals(action)) {
+                } else if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
                     syncConfigFromProviderAsync();
                 } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+                    logI("Screen turned on: start counting instantly");
+                    syncConfigFromProviderAsync();
                     if (mEstimator != null) {
                         mEstimator.onScreenStateChanged(true);
                     }
                     startSamplingLoop();
+                    applyPositionAndText();
+                } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+                    logI("Device unlocked: start counting instantly");
+                    syncConfigFromProviderAsync();
+                    if (mEstimator != null) {
+                        mEstimator.onScreenStateChanged(true);
+                        mEstimator.reset();
+                    }
+                    startSamplingLoop();
+                    applyPositionAndText();
                 } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+                    logI("Screen turned off: pause sampling");
                     if (mEstimator != null) {
                         mEstimator.onScreenStateChanged(false);
                     }
@@ -741,14 +754,15 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                     logE("Error in sampling loop", t);
                 }
 
-                int intervalMs = Math.max(2, mConfig.intervalSeconds) * 1000;
+                int intervalMs = Math.max(2, mConfig != null ? mConfig.intervalSeconds : 5) * 1000;
                 if (mWorkerHandler != null) {
                     mWorkerHandler.postDelayed(this, intervalMs);
                 }
             }
         };
 
-        mWorkerHandler.post(mUpdateRunnable);
+        int intervalMs = Math.max(2, mConfig != null ? mConfig.intervalSeconds : 5) * 1000;
+        mWorkerHandler.postDelayed(mUpdateRunnable, intervalMs);
     }
 
     private static int dpToPx(Context context, int dp) {
