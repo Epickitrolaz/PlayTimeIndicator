@@ -31,6 +31,7 @@ public class PlayTimeEstimatorTest {
         int batteryPercent = 60;
         int voltageMv = 3800;
         boolean isCharging = false;
+        boolean isCharged = false;
 
         public MockBatteryReader() {
             super(null);
@@ -57,6 +58,11 @@ public class PlayTimeEstimatorTest {
         @Override
         public boolean isCharging() {
             return isCharging;
+        }
+
+        @Override
+        public boolean isCharged() {
+            return isCharged || (isCharging && batteryPercent >= 100);
         }
 
         @Override
@@ -260,5 +266,134 @@ public class PlayTimeEstimatorTest {
         assertEquals(0, estimator.getSampleCount());
         assertEquals(-1, estimator.getRemainingPlayTimeMinutes(config));
         assertEquals("--", estimator.getFormattedDisplay(config, 0));
+    }
+
+    @Test
+    public void testChargedIndicationInsteadOfZeroMin() {
+        reader.isCharging = true;
+        reader.batteryPercent = 100;
+        reader.isCharged = true;
+        reader.remainingMah = 5000;
+        config.capacityOverrideMah = 5000;
+
+        estimator.recordDirectSample(config, 1000);
+
+        // When charged, indicator must display FULL, NOT 0m / 0min / 0:00
+        config.format = "COMPACT";
+        assertEquals("↯FULL", estimator.getFormattedDisplay(config, 0));
+
+        config.format = "SHORT";
+        assertEquals("↯FULL", estimator.getFormattedDisplay(config, 0));
+
+        config.format = "COLON";
+        assertEquals("↯FULL", estimator.getFormattedDisplay(config, 0));
+
+        config.format = "DETAILED";
+        assertEquals("↯FULL", estimator.getFormattedDisplay(config, 0));
+
+        // Different symbols when charged
+        config.chargingSymbol = "PLUS";
+        assertEquals("+FULL", estimator.getFormattedDisplay(config, 0));
+
+        config.chargingSymbol = "TEXT";
+        assertEquals("FULL", estimator.getFormattedDisplay(config, 0));
+
+        config.chargingSymbol = "BOLT_COLOR";
+        assertEquals("⚡FULL", estimator.getFormattedDisplay(config, 0));
+    }
+
+    @Test
+    public void testChargedIndicationWithDetailModes() {
+        reader.isCharging = true;
+        reader.batteryPercent = 100;
+        reader.isCharged = true;
+        reader.voltageMv = 4200;
+        estimator.recordDirectSample(config, 500); // 500mA * 4.2V = 2.1W
+
+        config.chargingSymbol = "BOLT_MONO";
+
+        config.detailMode = "TIME_WATTS";
+        assertEquals("↯FULL · +2.1W", estimator.getFormattedDisplay(config, 0));
+
+        config.detailMode = "TIME_WATTS_VOLTS";
+        assertEquals("↯FULL · +2.1W · 4.20V", estimator.getFormattedDisplay(config, 0));
+    }
+
+    @Test
+    public void testMeterDisplayIndividualOutputs() {
+        reader.isCharging = true;
+        reader.batteryPercent = 85;
+        reader.voltageMv = 4150; // 4.15V
+        reader.remainingMah = 4250;
+        config.capacityOverrideMah = 5000; // Need 750 mAh
+        estimator.recordDirectSample(config, 1500); // 750 / 1500 = 0.5h = 30m, 1500mA * 4.15V = 6.2W
+
+        // TIME meter
+        assertEquals("↯30m", estimator.getMeterDisplay("TIME", config));
+
+        // PERCENT meter
+        assertEquals("85%", estimator.getMeterDisplay("PERCENT", config));
+
+        // WATTS meter
+        assertEquals("+6.2W", estimator.getMeterDisplay("WATTS", config));
+
+        // VOLTS meter
+        assertEquals("4.15V", estimator.getMeterDisplay("VOLTS", config));
+    }
+
+    @Test
+    public void testMeterDisplayWhenCharged() {
+        reader.isCharging = true;
+        reader.batteryPercent = 100;
+        reader.isCharged = true;
+        reader.voltageMv = 4200;
+        estimator.recordDirectSample(config, 100);
+
+        // TIME meter shows charged indication
+        assertEquals("↯FULL", estimator.getMeterDisplay("TIME", config));
+
+        // PERCENT meter shows 100%
+        assertEquals("100%", estimator.getMeterDisplay("PERCENT", config));
+    }
+
+    @Test
+    public void testConfigChargingSwitchProperties() {
+        PlayTimeConfig cfg = new PlayTimeConfig();
+        cfg.chargingSwitchEnabled = true;
+        cfg.chargingSwitchInterval = 1.5f;
+        cfg.chargingSwitchMeters = "TIME,PERCENT,WATTS";
+
+        assertTrue(cfg.chargingSwitchEnabled);
+        assertEquals(1.5f, cfg.chargingSwitchInterval, 0.001f);
+        assertEquals("TIME,PERCENT,WATTS", cfg.chargingSwitchMeters);
+        assertEquals(1500L, cfg.getChargingSwitchIntervalMs());
+
+        // Meters list validation
+        assertEquals(3, cfg.getChargingSwitchMetersList().size());
+        assertEquals("TIME", cfg.getChargingSwitchMetersList().get(0));
+        assertEquals("PERCENT", cfg.getChargingSwitchMetersList().get(1));
+        assertEquals("WATTS", cfg.getChargingSwitchMetersList().get(2));
+    }
+
+    @Test
+    public void testConfigChargingSwitchMetersConstraints() {
+        PlayTimeConfig cfg = new PlayTimeConfig();
+
+        // Enforce maximum 3 meters if more provided
+        cfg.chargingSwitchMeters = "TIME,PERCENT,WATTS,VOLTS";
+        assertEquals(3, cfg.getChargingSwitchMetersList().size());
+
+        // Enforce minimum 2 meters if empty or 1 provided
+        cfg.chargingSwitchMeters = "TIME";
+        assertEquals(2, cfg.getChargingSwitchMetersList().size());
+        assertEquals("TIME", cfg.getChargingSwitchMetersList().get(0));
+        assertEquals("PERCENT", cfg.getChargingSwitchMetersList().get(1));
+
+        // Clamping intervals: 0.5s to 5.0s
+        cfg.chargingSwitchInterval = 0.1f;
+        assertEquals(500L, cfg.getChargingSwitchIntervalMs());
+
+        cfg.chargingSwitchInterval = 10.0f;
+        assertEquals(5000L, cfg.getChargingSwitchIntervalMs());
     }
 }

@@ -238,6 +238,122 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Charging Indicator Switching Card (Replace Percent Mode) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardChargingSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/card_charging_switch_settings"
+                        android:textColor="@color/primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp"/>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchChargingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/pref_charging_switch_enable"
+                        android:textColor="@color/text_primary"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/pref_charging_switch_enable_summary"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="8dp"/>
+
+                    <LinearLayout
+                        android:id="@+id/layoutChargingSwitchOptions"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <!-- Switch Interval -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/pref_charging_switch_interval"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:layout_marginTop="8dp"/>
+
+                        <Spinner
+                            android:id="@+id/spinnerChargingSwitchInterval"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:backgroundTint="@color/text_primary"/>
+
+                        <!-- Selected Meters -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/pref_charging_switch_meters"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:layout_marginTop="8dp"/>
+
+                        <CheckBox
+                            android:id="@+id/cbSwitchTime"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/meter_time"
+                            android:textColor="@color/text_primary"
+                            android:buttonTint="@color/primary"
+                            android:checked="true"/>
+
+                        <CheckBox
+                            android:id="@+id/cbSwitchPercent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/meter_percent"
+                            android:textColor="@color/text_primary"
+                            android:buttonTint="@color/primary"
+                            android:checked="true"/>
+
+                        <CheckBox
+                            android:id="@+id/cbSwitchWatts"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/meter_watts"
+                            android:textColor="@color/text_primary"
+                            android:buttonTint="@color/primary"/>
+
+                        <CheckBox
+                            android:id="@+id/cbSwitchVolts"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/meter_volts"
+                            android:textColor="@color/text_primary"
+                            android:buttonTint="@color/primary"/>
+
+                        <TextView
+                            android:id="@+id/tvChargingSwitchNote"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/pref_charging_switch_note"
+                            android:textColor="@color/accent_handheld"
+                            android:textSize="11sp"
+                            android:layout_marginTop="8dp"/>
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- Estimation Engine Settings Card -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"

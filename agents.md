@@ -71,7 +71,8 @@ It solves the problem of stock Android battery estimations factoring in hours of
   - Supports positions: `BATTERY_LEFT`, `BATTERY_RIGHT`, `CLOCK_LEFT`, `CLOCK_RIGHT`.
   - **`REPLACE_PERCENT` Mode:** Intercepts `updatePercentText`, `setPercentTextAtCurrentLevel`, and `updateShowPercent` on `BatteryMeterView` to repurpose the native battery percentage text field directly with native status-bar styling.
 - **Tint Adaptation:** Hooks `onDarkChanged` and `updateColors` on `BatteryMeterView` to match status bar icon and text colors dynamically.
-- **Tap Cycling:** Attaches an `OnClickListener` to the injected/replaced view to cycle metrics on tap (`Configured` $\to$ `Watts` $\to$ `Volts` $\to$ `Battery %`).
+- **Charging Indicator Switcher (Replace % Mode):** When charging in `REPLACE_PERCENT` mode with switcher enabled, a lightweight UI-thread ticker rotates between 2-3 selected meters (Time, %, Watts, Volts) at a configurable 0.5s - 5.0s interval. Automatically pauses when the screen turns off (`ACTION_SCREEN_OFF`) to prevent battery drain.
+- **Tap Cycling:** Attaches an `OnClickListener` to the injected/replaced view to cycle metrics on tap (`Configured` $\to$ `Watts` $\to$ `Volts` $\to$ `Battery %`) or immediately advance the active meter in charging switcher mode.
 
 ### 3.2. Telemetry & Hardware Reading (`BatteryReader.java`)
 - **Direct Linux Sysfs Parsing:** Reads `/sys/class/power_supply/battery/*` or `/sys/class/power_supply/bms/*`:
@@ -87,8 +88,8 @@ It solves the problem of stock Android battery estimations factoring in hours of
 - **Instant Counting & Rough Estimate:** When a device is unlocked (screen turns on), active counting begins instantly. A rough estimate is displayed after the first interval (default 5s) and gradually refines in accuracy over the rolling window.
 - **Estimates:**
   - **Discharging:** $T_{\text{remaining}} = \frac{\text{Current Capacity (mAh)}}{\text{Rolling Average Discharge Rate (mA)}}$
-  - **Charging:** $T_{\text{to\_full}} = \frac{\text{Max Capacity} - \text{Current Capacity}}{\text{Rolling Average Charge Rate (mA)}}$
-- **Formatting:** Supports `COMPACT` (`2h 45m`), `SHORT` (`2h45`), `COLON` (`2:45`), and `DETAILED` (`2 hr 45 min`), with customizable detail levels (Watts, Volts).
+  - **Charging:** $T_{\text{to\_full}} = \frac{\text{Max Capacity} - \text{Current Capacity}}{\text{Rolling Average Charge Rate (mA)}}$. When fully charged (`isCharged()` / `BATTERY_STATUS_FULL` / level $\ge 100\%$), displays an unambiguous charged status (`↯FULL` / `FULL`) instead of `0m` or `0min`.
+- **Formatting:** Supports `COMPACT` (`2h 45m`), `SHORT` (`2h45`), `COLON` (`2:45`), and `DETAILED` (`2 hr 45 min`), with customizable detail levels (Watts, Volts). Individual meter formatting is provided via `getMeterDisplay(meter, config)`.
 
 ### 3.4. Inter-Process Communication (IPC) & Multi-Tier Boot Persistence
 - **Tier 1 (Android System Settings):** When config is applied, SystemUI (running with `android.uid.system` and `WRITE_SECURE_SETTINGS`) writes the serialized JSON configuration directly into `Settings.Global` (`playtime_indicator_config`). Because `Settings.Global` is stored in `/data/system/users/0/settings_global.xml` and loaded by `system_server` at early boot, it is available to SystemUI at the exact 0th millisecond of boot without any IPC latency, permissions issues, or Direct Boot decryption delays.

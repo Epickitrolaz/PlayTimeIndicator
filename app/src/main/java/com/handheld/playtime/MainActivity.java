@@ -4,7 +4,13 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
+import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -19,6 +25,8 @@ import com.handheld.playtime.battery.BatteryReader;
 import com.handheld.playtime.battery.PlayTimeEstimator;
 import com.handheld.playtime.config.PlayTimeConfig;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
@@ -46,6 +54,16 @@ public class MainActivity extends AppCompatActivity {
     private Spinner mSpinnerInterval;
     private TextInputEditText mEtCapacityOverride;
     private MaterialButton mBtnApply;
+
+    private SwitchMaterial mSwitchChargingSwitch;
+    private Spinner mSpinnerChargingSwitchInterval;
+    private CheckBox mCbSwitchTime;
+    private CheckBox mCbSwitchPercent;
+    private CheckBox mCbSwitchWatts;
+    private CheckBox mCbSwitchVolts;
+    private TextView mTvChargingSwitchNote;
+    private LinearLayout mLayoutChargingSwitchOptions;
+    private int mDiagCycleCounter = 0;
 
     private Handler mDiagHandler;
     private Runnable mDiagRunnable;
@@ -102,6 +120,29 @@ public class MainActivity extends AppCompatActivity {
         mEtCapacityOverride = findViewById(R.id.etCapacityOverride);
         mBtnApply = findViewById(R.id.btnApply);
 
+        mSwitchChargingSwitch = findViewById(R.id.switchChargingSwitch);
+        mSpinnerChargingSwitchInterval = findViewById(R.id.spinnerChargingSwitchInterval);
+        mCbSwitchTime = findViewById(R.id.cbSwitchTime);
+        mCbSwitchPercent = findViewById(R.id.cbSwitchPercent);
+        mCbSwitchWatts = findViewById(R.id.cbSwitchWatts);
+        mCbSwitchVolts = findViewById(R.id.cbSwitchVolts);
+        mTvChargingSwitchNote = findViewById(R.id.tvChargingSwitchNote);
+        mLayoutChargingSwitchOptions = findViewById(R.id.layoutChargingSwitchOptions);
+
+        mSwitchChargingSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            mLayoutChargingSwitchOptions.setVisibility(isChecked ? View.VISIBLE : View.GONE);
+        });
+
+        mSpinnerPosition.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                updateChargingSwitchNoteVisibility();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
         mBtnApply.setOnClickListener(v -> saveAndApplySettings());
     }
 
@@ -147,6 +188,13 @@ public class MainActivity extends AppCompatActivity {
         );
         intervalAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         mSpinnerInterval.setAdapter(intervalAdapter);
+
+        // Charging Switch Interval Spinner
+        ArrayAdapter<CharSequence> chgIntervalAdapter = ArrayAdapter.createFromResource(
+            this, R.array.charging_switch_interval_entries, android.R.layout.simple_spinner_item
+        );
+        chgIntervalAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        mSpinnerChargingSwitchInterval.setAdapter(chgIntervalAdapter);
     }
 
     private void loadConfigToUi() {
@@ -207,6 +255,67 @@ public class MainActivity extends AppCompatActivity {
                 break;
             }
         }
+
+        // Charging switch
+        mSwitchChargingSwitch.setChecked(mConfig.chargingSwitchEnabled);
+        mLayoutChargingSwitchOptions.setVisibility(mConfig.chargingSwitchEnabled ? View.VISIBLE : View.GONE);
+
+        // Charging switch interval
+        String[] chgIntervalValues = getResources().getStringArray(R.array.charging_switch_interval_values);
+        for (int i = 0; i < chgIntervalValues.length; i++) {
+            if (Math.abs(Float.parseFloat(chgIntervalValues[i]) - mConfig.chargingSwitchInterval) < 0.05f) {
+                mSpinnerChargingSwitchInterval.setSelection(i);
+                break;
+            }
+        }
+
+        // Selected meters checkboxes
+        mCbSwitchTime.setOnCheckedChangeListener(null);
+        mCbSwitchPercent.setOnCheckedChangeListener(null);
+        mCbSwitchWatts.setOnCheckedChangeListener(null);
+        mCbSwitchVolts.setOnCheckedChangeListener(null);
+
+        List<String> meters = mConfig.getChargingSwitchMetersList();
+        mCbSwitchTime.setChecked(meters.contains("TIME"));
+        mCbSwitchPercent.setChecked(meters.contains("PERCENT"));
+        mCbSwitchWatts.setChecked(meters.contains("WATTS"));
+        mCbSwitchVolts.setChecked(meters.contains("VOLTS"));
+
+        setupMeterCheckboxes();
+        updateChargingSwitchNoteVisibility();
+    }
+
+    private void setupMeterCheckboxes() {
+        CompoundButton.OnCheckedChangeListener listener = (buttonView, isChecked) -> {
+            int count = 0;
+            if (mCbSwitchTime.isChecked()) count++;
+            if (mCbSwitchPercent.isChecked()) count++;
+            if (mCbSwitchWatts.isChecked()) count++;
+            if (mCbSwitchVolts.isChecked()) count++;
+
+            if (isChecked && count > 3) {
+                buttonView.setChecked(false);
+                Toast.makeText(this, R.string.toast_max_meters, Toast.LENGTH_SHORT).show();
+            } else if (!isChecked && count < 2) {
+                buttonView.setChecked(true);
+                Toast.makeText(this, R.string.toast_min_meters, Toast.LENGTH_SHORT).show();
+            }
+        };
+
+        mCbSwitchTime.setOnCheckedChangeListener(listener);
+        mCbSwitchPercent.setOnCheckedChangeListener(listener);
+        mCbSwitchWatts.setOnCheckedChangeListener(listener);
+        mCbSwitchVolts.setOnCheckedChangeListener(listener);
+    }
+
+    private void updateChargingSwitchNoteVisibility() {
+        String[] positionValues = getResources().getStringArray(R.array.position_values);
+        int posIdx = mSpinnerPosition.getSelectedItemPosition();
+        boolean isReplace = posIdx >= 0 && posIdx < positionValues.length
+            && "REPLACE_PERCENT".equalsIgnoreCase(positionValues[posIdx]);
+        if (mTvChargingSwitchNote != null) {
+            mTvChargingSwitchNote.setVisibility(isReplace ? View.GONE : View.VISIBLE);
+        }
     }
 
     private void saveAndApplySettings() {
@@ -237,6 +346,26 @@ public class MainActivity extends AppCompatActivity {
         } catch (NumberFormatException e) {
             mConfig.capacityOverrideMah = 0;
         }
+
+        mConfig.chargingSwitchEnabled = mSwitchChargingSwitch.isChecked();
+
+        String[] chgIntervalValues = getResources().getStringArray(R.array.charging_switch_interval_values);
+        try {
+            mConfig.chargingSwitchInterval = Float.parseFloat(chgIntervalValues[mSpinnerChargingSwitchInterval.getSelectedItemPosition()]);
+        } catch (Throwable e) {
+            mConfig.chargingSwitchInterval = 1.0f;
+        }
+
+        List<String> selectedMeters = new ArrayList<>();
+        if (mCbSwitchTime.isChecked()) selectedMeters.add("TIME");
+        if (mCbSwitchPercent.isChecked()) selectedMeters.add("PERCENT");
+        if (mCbSwitchWatts.isChecked()) selectedMeters.add("WATTS");
+        if (mCbSwitchVolts.isChecked()) selectedMeters.add("VOLTS");
+        if (selectedMeters.size() < 2) {
+            selectedMeters.add("TIME");
+            selectedMeters.add("PERCENT");
+        }
+        mConfig.chargingSwitchMeters = TextUtils.join(",", selectedMeters);
 
         mConfig.saveToSharedPreferences(this);
         mConfig.sendUpdateBroadcast(this);
@@ -287,7 +416,21 @@ public class MainActivity extends AppCompatActivity {
                 float watts = (currentMa * (mv / 1000f)) / 1000f;
                 int remainingMah = mBatteryReader.getRemainingCapacityMah(mConfig.capacityOverrideMah);
                 int pct = mBatteryReader.getBatteryLevelPercent();
-                String previewStr = mEstimator.getFormattedDisplay(mConfig, 0);
+
+                String previewStr;
+                boolean isCharging = mBatteryReader.isCharging();
+                boolean isReplace = "REPLACE_PERCENT".equalsIgnoreCase(mConfig.position);
+
+                if (mConfig.enabled && isReplace && mConfig.chargingSwitchEnabled && isCharging) {
+                    List<String> meters = mConfig.getChargingSwitchMetersList();
+                    int idx = mDiagCycleCounter % meters.size();
+                    String currentMeter = meters.get(idx);
+                    mDiagCycleCounter++;
+                    previewStr = mEstimator.getMeterDisplay(currentMeter, mConfig)
+                        + " (Cycle: " + String.format(Locale.US, "%.1fs", mConfig.chargingSwitchInterval) + ")";
+                } else {
+                    previewStr = mEstimator.getFormattedDisplay(mConfig, 0);
+                }
 
                 mTvLiveCurrent.setText(String.format(Locale.US, "Current Draw: %d mA (%.1f W)", currentMa, watts));
                 mTvLiveCapacity.setText(String.format(Locale.US, "Remaining Capacity: %d mAh (%d%%)", remainingMah, pct));

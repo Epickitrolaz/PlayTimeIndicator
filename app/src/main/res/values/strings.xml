@@ -35,4 +35,18 @@
 
     <string name="btn_apply">Apply Settings to SystemUI</string>
     <string name="toast_applied">Settings sent to SystemUI!</string>
+
+    <!-- Charging Indicator Switching -->
+    <string name="card_charging_switch_settings">Charging Indicator Switching</string>
+    <string name="pref_charging_switch_enable">Switch Meters While Charging</string>
+    <string name="pref_charging_switch_enable_summary">When charging in Replace Percentage mode, cycle through selected meters automatically</string>
+    <string name="pref_charging_switch_interval">Switch Interval</string>
+    <string name="pref_charging_switch_meters">Meters to Cycle (Choose 2 or 3)</string>
+    <string name="meter_time">Time to Charge / Play Time (↯1h 25m / FULL)</string>
+    <string name="meter_percent">Battery Percentage (%)</string>
+    <string name="meter_watts">Charging Wattage (W)</string>
+    <string name="meter_volts">Battery Voltage (V)</string>
+    <string name="pref_charging_switch_note">Note: Meter switching activates when Position is set to \"Replace Battery Percentage\" and the device is connected to a charger.</string>
+    <string name="toast_max_meters">You can select at most 3 meters to cycle</string>
+    <string name="toast_min_meters">Please select at least 2 meters to cycle</string>
 </resources>

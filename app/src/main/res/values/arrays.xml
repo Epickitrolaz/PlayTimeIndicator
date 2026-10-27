@@ -99,4 +99,27 @@
         <item>5</item>
         <item>10</item>
     </string-array>
+
+    <!-- Charging Switch Interval (0.5s - 5s) -->
+    <string-array name="charging_switch_interval_entries">
+        <item>0.5 Seconds (Fast)</item>
+        <item>1.0 Second (Recommended)</item>
+        <item>1.5 Seconds</item>
+        <item>2.0 Seconds</item>
+        <item>2.5 Seconds</item>
+        <item>3.0 Seconds</item>
+        <item>4.0 Seconds</item>
+        <item>5.0 Seconds</item>
+    </string-array>
+
+    <string-array name="charging_switch_interval_values">
+        <item>0.5</item>
+        <item>1.0</item>
+        <item>1.5</item>
+        <item>2.0</item>
+        <item>2.5</item>
+        <item>3.0</item>
+        <item>4.0</item>
+        <item>5.0</item>
+    </string-array>
 </resources>

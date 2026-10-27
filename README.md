@@ -34,6 +34,9 @@ Stock Android's battery prediction calculates battery life based on historical a
 - **Charging Time-to-Full & Custom Symbols:**
   - Automatically calculates remaining time until 100% full when connected to a charger.
   - Choose between non-color/monochrome symbols (`↯`, `+`, `CHG`) or standard emoji (`⚡`).
+  - **Full Charge Indication:** When the battery is fully charged, displays a clear charged status (`↯FULL` / `FULL`) instead of misleading `0m` / `0min` text.
+- **Charging Indicator Cycling (Replace % Mode):**
+  - When charging with *Replace Battery Percentage* active, automatically alternates between 2 to 3 chosen meters (Time to Charge, Battery %, Wattage, Voltage) at an interval of **0.5s to 5s** (e.g. alternating between Time to Charge and Battery % every 1.0 second).
 - **Tap-to-Cycle Metric:**
   - Tap the status bar indicator at any time to cycle on the fly between your configured view $\to$ **Watts** $\to$ **Volts** $\to$ **Battery %**.
 - **Dark Mode Tint Synchronization:**

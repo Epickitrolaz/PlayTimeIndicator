@@ -23,6 +23,7 @@ import com.handheld.playtime.config.PlayTimeConfig;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.WeakHashMap;
 
@@ -60,6 +61,9 @@ public class SystemUIHook implements IXposedHookLoadPackage {
     private int mCurrentTint = Color.WHITE;
     private int mMetricMode = 0; // 0: Configured, 1: Watts, 2: Volts, 3: Battery %
     private boolean mReceiversRegistered = false;
+    private int mChargingCycleIndex = 0;
+    private Runnable mChargingSwitchRunnable;
+    private boolean mScreenOn = true;
 
     private static void logI(String msg) {
         Log.i(TAG, msg);
@@ -77,6 +81,28 @@ public class SystemUIHook implements IXposedHookLoadPackage {
 
     private boolean isReplacePercent() {
         return mConfig != null && "REPLACE_PERCENT".equalsIgnoreCase(mConfig.position);
+    }
+
+    private boolean isChargingSwitchActive() {
+        return mConfig != null
+            && mConfig.enabled
+            && isReplacePercent()
+            && mConfig.chargingSwitchEnabled
+            && mBatteryReader != null
+            && mBatteryReader.isCharging();
+    }
+
+    private String getCurrentDisplayText() {
+        if (mEstimator == null || mConfig == null) return "";
+        if (isChargingSwitchActive()) {
+            List<String> meters = mConfig.getChargingSwitchMetersList();
+            if (!meters.isEmpty()) {
+                int index = mChargingCycleIndex % meters.size();
+                String meter = meters.get(index);
+                return mEstimator.getMeterDisplay(meter, mConfig);
+            }
+        }
+        return mEstimator.getFormattedDisplay(mConfig, mMetricMode);
     }
 
     @Override
@@ -255,7 +281,7 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                             try {
                                 TextView percentView = (TextView) XposedHelpers.getObjectField(param.thisObject, "mBatteryPercentView");
                                 if (percentView != null && mEstimator != null) {
-                                    String text = mEstimator.getFormattedDisplay(mConfig, mMetricMode);
+                                    String text = getCurrentDisplayText();
                                     percentView.setText(text);
                                     percentView.setVisibility(View.VISIBLE);
                                     setupTapListener(percentView);
@@ -279,7 +305,7 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                             try {
                                 TextView percentView = (TextView) XposedHelpers.getObjectField(param.thisObject, "mBatteryPercentView");
                                 if (percentView != null && mEstimator != null) {
-                                    String text = mEstimator.getFormattedDisplay(mConfig, mMetricMode);
+                                    String text = getCurrentDisplayText();
                                     percentView.setText(text);
                                     setupTapListener(percentView);
                                 }
@@ -381,6 +407,9 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                 config.fontSize = xsp.getFloat(PlayTimeConfig.KEY_FONT_SIZE, 12f);
                 config.tapToggle = xsp.getBoolean(PlayTimeConfig.KEY_TAP_TOGGLE, true);
                 config.capacityOverrideMah = xsp.getInt(PlayTimeConfig.KEY_CAPACITY_OVERRIDE, 0);
+                config.chargingSwitchEnabled = xsp.getBoolean(PlayTimeConfig.KEY_CHARGING_SWITCH_ENABLED, false);
+                config.chargingSwitchInterval = xsp.getFloat(PlayTimeConfig.KEY_CHARGING_SWITCH_INTERVAL, 1.0f);
+                config.chargingSwitchMeters = xsp.getString(PlayTimeConfig.KEY_CHARGING_SWITCH_METERS, "TIME,PERCENT");
                 logI("Loaded config from XSharedPreferences: pos=" + config.position);
                 return config;
             }
@@ -452,16 +481,84 @@ public class SystemUIHook implements IXposedHookLoadPackage {
         if (view == null) return;
         view.setOnClickListener(v -> {
             if (mConfig != null && mConfig.tapToggle) {
-                mMetricMode = (mMetricMode + 1) % 4; // 0: Configured, 1: Watts, 2: Volts, 3: Battery %
-                applyPositionAndText();
+                if (isChargingSwitchActive()) {
+                    List<String> meters = mConfig.getChargingSwitchMetersList();
+                    if (!meters.isEmpty()) {
+                        mChargingCycleIndex = (mChargingCycleIndex + 1) % meters.size();
+                        updatePercentViewsTextOnly();
+                    }
+                } else {
+                    mMetricMode = (mMetricMode + 1) % 4; // 0: Configured, 1: Watts, 2: Volts, 3: Battery %
+                    applyPositionAndText();
+                }
             }
         });
+    }
+
+    private synchronized void updateChargingSwitchLoopState() {
+        if (isChargingSwitchActive() && mScreenOn) {
+            startChargingSwitchLoop();
+        } else {
+            stopChargingSwitchLoop();
+        }
+    }
+
+    private synchronized void startChargingSwitchLoop() {
+        if (mChargingSwitchRunnable != null) {
+            return;
+        }
+
+        mChargingSwitchRunnable = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (isChargingSwitchActive() && mScreenOn) {
+                        List<String> meters = mConfig.getChargingSwitchMetersList();
+                        if (meters.size() >= 2) {
+                            mChargingCycleIndex = (mChargingCycleIndex + 1) % meters.size();
+                            updatePercentViewsTextOnly();
+                        }
+                        long intervalMs = mConfig.getChargingSwitchIntervalMs();
+                        mMainHandler.postDelayed(this, intervalMs);
+                    } else {
+                        stopChargingSwitchLoop();
+                    }
+                } catch (Throwable t) {
+                    logE("Error in charging switch loop", t);
+                }
+            }
+        };
+
+        long intervalMs = mConfig.getChargingSwitchIntervalMs();
+        mMainHandler.postDelayed(mChargingSwitchRunnable, intervalMs);
+    }
+
+    private synchronized void stopChargingSwitchLoop() {
+        if (mChargingSwitchRunnable != null) {
+            mMainHandler.removeCallbacks(mChargingSwitchRunnable);
+            mChargingSwitchRunnable = null;
+        }
+    }
+
+    private void updatePercentViewsTextOnly() {
+        if (mAppContext == null || mEstimator == null || mConfig == null) return;
+        final String text = getCurrentDisplayText();
+        for (View bView : mBatteryViews) {
+            if (bView != null && bView.isAttachedToWindow()) {
+                try {
+                    TextView percentView = (TextView) XposedHelpers.getObjectField(bView, "mBatteryPercentView");
+                    if (percentView != null) {
+                        percentView.setText(text);
+                    }
+                } catch (Throwable ignored) {}
+            }
+        }
     }
 
     private synchronized void applyPositionAndText() {
         if (mAppContext == null || mEstimator == null || mConfig == null) return;
 
-        final String text = mEstimator.getFormattedDisplay(mConfig, mMetricMode);
+        final String text = getCurrentDisplayText();
 
         mMainHandler.post(() -> {
             try {
@@ -501,6 +598,7 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                             }
                         }
                     }
+                    updateChargingSwitchLoopState();
                     return;
                 }
 
@@ -565,6 +663,7 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                     int color = resolveColor(targetAnchor, parent);
                     mPlayTimeView.setTextColor(color);
                 }
+                updateChargingSwitchLoopState();
             } catch (Throwable t) {
                 logE("Error applying indicator position", t);
             }
@@ -647,6 +746,7 @@ public class SystemUIHook implements IXposedHookLoadPackage {
 
                 String action = intent.getAction();
                 if (PlayTimeConfig.ACTION_UPDATE_CONFIG.equals(action)) {
+                    stopChargingSwitchLoop();
                     mConfig = PlayTimeConfig.fromBundle(intent.getExtras());
                     mConfigLoaded = true;
                     if (mAppContext != null) {
@@ -659,6 +759,7 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                     syncConfigFromProviderAsync();
                 } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                     logI("Screen turned on: start counting instantly");
+                    mScreenOn = true;
                     syncConfigFromProviderAsync();
                     if (mEstimator != null) {
                         mEstimator.onScreenStateChanged(true);
@@ -667,6 +768,7 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                     applyPositionAndText();
                 } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
                     logI("Device unlocked: start counting instantly");
+                    mScreenOn = true;
                     syncConfigFromProviderAsync();
                     if (mEstimator != null) {
                         mEstimator.onScreenStateChanged(true);
@@ -676,12 +778,14 @@ public class SystemUIHook implements IXposedHookLoadPackage {
                     applyPositionAndText();
                 } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                     logI("Screen turned off: pause sampling");
+                    mScreenOn = false;
                     if (mEstimator != null) {
                         mEstimator.onScreenStateChanged(false);
                     }
                     if (mWorkerHandler != null && mUpdateRunnable != null) {
                         mWorkerHandler.removeCallbacks(mUpdateRunnable);
                     }
+                    stopChargingSwitchLoop();
                 } else if (Intent.ACTION_BATTERY_CHANGED.equals(action)) {
                     applyPositionAndText();
                 }

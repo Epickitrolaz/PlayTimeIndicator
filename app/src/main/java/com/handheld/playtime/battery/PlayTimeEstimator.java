@@ -126,24 +126,46 @@ public class PlayTimeEstimator {
     }
 
     /**
-     * Generates the formatted display string for the status bar.
-     * @param overrideMode 0: Default configured detail mode, 1: Watts only, 2: Volts only, 3: Battery %
+     * Checks if the battery is fully charged.
      */
-    public String getFormattedDisplay(PlayTimeConfig config, int overrideMode) {
+    public boolean isBatteryCharged(PlayTimeConfig config) {
+        if (mReader != null && mReader.isCharged()) {
+            return true;
+        }
+        if (mReader != null && mReader.isCharging()) {
+            if (mReader.getBatteryLevelPercent() >= 100) {
+                return true;
+            }
+            int pct = mReader.getBatteryLevelPercent();
+            if (pct >= 95) {
+                int totalMah = config != null && config.capacityOverrideMah > 0 ? config.capacityOverrideMah : 5000;
+                int remainingMah = mReader.getRemainingCapacityMah(config != null ? config.capacityOverrideMah : 0);
+                if (remainingMah >= totalMah) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Formats the charged indication string based on charging symbol settings.
+     */
+    public String formatChargedText(PlayTimeConfig config, String chgPrefix) {
+        String sym = config != null && config.chargingSymbol != null ? config.chargingSymbol : "BOLT_MONO";
+        String prefix = chgPrefix != null ? chgPrefix : "";
+        if ("TEXT".equals(sym)) {
+            prefix = "";
+        }
+        return prefix + "FULL";
+    }
+
+    /**
+     * Returns the formatted time component (or charged text when full).
+     */
+    public String getTimeDisplay(PlayTimeConfig config) {
         boolean charging = mReader != null && mReader.isCharging();
         int currentMa = getAverageCurrentMa();
-        int mv = mReader != null ? mReader.getVoltageMv() : 3800;
-        float volts = mv / 1000f;
-        float watts = (currentMa * volts) / 1000f;
-
-        // Interactive tap override modes
-        if (overrideMode == 1) {
-            return formatWatts(watts, charging);
-        } else if (overrideMode == 2) {
-            return String.format(Locale.US, "%.2fV", volts);
-        } else if (overrideMode == 3) {
-            return (mReader != null ? mReader.getBatteryLevelPercent() : 0) + "%";
-        }
 
         // Determine non-color or custom charging symbol prefix
         String chgPrefix = "";
@@ -166,25 +188,90 @@ public class PlayTimeEstimator {
             }
         }
 
-        // Compute time component
-        String timeStr;
         if (charging) {
-            if (mSamples.isEmpty()) {
-                timeStr = chgPrefix.trim();
+            boolean charged = isBatteryCharged(config);
+            if (charged) {
+                return formatChargedText(config, chgPrefix);
+            } else if (mSamples.isEmpty()) {
+                return chgPrefix.trim();
             } else if (currentMa > 100) {
                 int totalMah = config != null && config.capacityOverrideMah > 0 ? config.capacityOverrideMah : 5000;
                 int remainingMah = mReader != null ? mReader.getRemainingCapacityMah(config != null ? config.capacityOverrideMah : 0) : 0;
                 int neededMah = Math.max(0, totalMah - remainingMah);
-                int minsToFull = (int) (((long) neededMah * 60) / currentMa);
-                timeStr = chgPrefix + formatTime(minsToFull, config != null ? config.format : "COMPACT");
+                if (neededMah <= 0 && (mReader == null || mReader.getBatteryLevelPercent() >= 95)) {
+                    return formatChargedText(config, chgPrefix);
+                } else {
+                    int minsToFull = (int) (((long) neededMah * 60) / currentMa);
+                    if (minsToFull <= 0 && (mReader == null || mReader.getBatteryLevelPercent() >= 95)) {
+                        return formatChargedText(config, chgPrefix);
+                    } else {
+                        return chgPrefix + formatTime(minsToFull, config != null ? config.format : "COMPACT");
+                    }
+                }
             } else {
-                timeStr = chgPrefix.trim();
+                int pct = mReader != null ? mReader.getBatteryLevelPercent() : 0;
+                if (pct >= 95) {
+                    return formatChargedText(config, chgPrefix);
+                } else {
+                    return chgPrefix.trim();
+                }
             }
         } else {
             int remainingMinutes = getRemainingPlayTimeMinutes(config);
-            timeStr = formatTime(remainingMinutes, config != null ? config.format : "COMPACT");
+            return formatTime(remainingMinutes, config != null ? config.format : "COMPACT");
+        }
+    }
+
+    /**
+     * Returns the formatted string for an individual meter.
+     * Supported meters: "TIME", "PERCENT", "WATTS", "VOLTS".
+     */
+    public String getMeterDisplay(String meter, PlayTimeConfig config) {
+        if (meter == null) meter = "TIME";
+        boolean charging = mReader != null && mReader.isCharging();
+        int currentMa = getAverageCurrentMa();
+        int mv = mReader != null ? mReader.getVoltageMv() : 3800;
+        float volts = mv / 1000f;
+        float watts = (currentMa * volts) / 1000f;
+
+        switch (meter.toUpperCase(Locale.US)) {
+            case "PERCENT":
+                int pct = mReader != null ? mReader.getBatteryLevelPercent() : 0;
+                return pct + "%";
+
+            case "WATTS":
+                return formatWatts(watts, charging);
+
+            case "VOLTS":
+                return String.format(Locale.US, "%.2fV", volts);
+
+            case "TIME":
+            default:
+                return getTimeDisplay(config);
+        }
+    }
+
+    /**
+     * Generates the formatted display string for the status bar.
+     * @param overrideMode 0: Default configured detail mode, 1: Watts only, 2: Volts only, 3: Battery %
+     */
+    public String getFormattedDisplay(PlayTimeConfig config, int overrideMode) {
+        boolean charging = mReader != null && mReader.isCharging();
+        int currentMa = getAverageCurrentMa();
+        int mv = mReader != null ? mReader.getVoltageMv() : 3800;
+        float volts = mv / 1000f;
+        float watts = (currentMa * volts) / 1000f;
+
+        // Interactive tap override modes
+        if (overrideMode == 1) {
+            return formatWatts(watts, charging);
+        } else if (overrideMode == 2) {
+            return String.format(Locale.US, "%.2fV", volts);
+        } else if (overrideMode == 3) {
+            return (mReader != null ? mReader.getBatteryLevelPercent() : 0) + "%";
         }
 
+        String timeStr = getTimeDisplay(config);
         String wattsStr = formatWatts(watts, charging);
         String voltsStr = String.format(Locale.US, "%.2fV", volts);
 

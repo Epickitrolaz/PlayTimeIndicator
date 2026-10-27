@@ -11,6 +11,9 @@ import android.util.Log;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 public class PlayTimeConfig {
     private static final String TAG = "PlayTimeConfig";
@@ -35,6 +38,9 @@ public class PlayTimeConfig {
     public static final String KEY_FONT_SIZE = "font_size";
     public static final String KEY_TAP_TOGGLE = "tap_toggle";
     public static final String KEY_CAPACITY_OVERRIDE = "capacity_override";
+    public static final String KEY_CHARGING_SWITCH_ENABLED = "charging_switch_enabled";
+    public static final String KEY_CHARGING_SWITCH_INTERVAL = "charging_switch_interval";
+    public static final String KEY_CHARGING_SWITCH_METERS = "charging_switch_meters";
 
     public boolean enabled = true;
     public int windowMinutes = 5;
@@ -46,6 +52,41 @@ public class PlayTimeConfig {
     public float fontSize = 12f;
     public boolean tapToggle = true;
     public int capacityOverrideMah = 0; // 0 = auto-detect
+    public boolean chargingSwitchEnabled = false;
+    public float chargingSwitchInterval = 1.0f; // 0.5s - 5.0s
+    public String chargingSwitchMeters = "TIME,PERCENT"; // comma-separated meters: TIME, PERCENT, WATTS, VOLTS
+
+    public List<String> getChargingSwitchMetersList() {
+        List<String> list = new ArrayList<>();
+        if (chargingSwitchMeters != null) {
+            String[] parts = chargingSwitchMeters.split(",");
+            for (String p : parts) {
+                String m = p.trim().toUpperCase(Locale.US);
+                if (isValidMeter(m) && !list.contains(m)) {
+                    list.add(m);
+                }
+            }
+        }
+        if (list.size() < 2) {
+            list.clear();
+            list.add("TIME");
+            list.add("PERCENT");
+        }
+        if (list.size() > 3) {
+            list = new ArrayList<>(list.subList(0, 3));
+        }
+        return list;
+    }
+
+    public static boolean isValidMeter(String meter) {
+        return "TIME".equals(meter) || "PERCENT".equals(meter)
+            || "WATTS".equals(meter) || "VOLTS".equals(meter);
+    }
+
+    public long getChargingSwitchIntervalMs() {
+        float sec = Math.max(0.5f, Math.min(5.0f, chargingSwitchInterval));
+        return (long) (sec * 1000f);
+    }
 
     public String toJson() {
         try {
@@ -60,6 +101,9 @@ public class PlayTimeConfig {
             obj.put(KEY_FONT_SIZE, (double) fontSize);
             obj.put(KEY_TAP_TOGGLE, tapToggle);
             obj.put(KEY_CAPACITY_OVERRIDE, capacityOverrideMah);
+            obj.put(KEY_CHARGING_SWITCH_ENABLED, chargingSwitchEnabled);
+            obj.put(KEY_CHARGING_SWITCH_INTERVAL, (double) chargingSwitchInterval);
+            obj.put(KEY_CHARGING_SWITCH_METERS, chargingSwitchMeters);
             return obj.toString();
         } catch (Throwable t) {
             Log.e(TAG, "Error serializing config to JSON", t);
@@ -87,6 +131,9 @@ public class PlayTimeConfig {
             config.fontSize = (float) obj.optDouble(KEY_FONT_SIZE, 12.0);
             config.tapToggle = obj.optBoolean(KEY_TAP_TOGGLE, true);
             config.capacityOverrideMah = obj.optInt(KEY_CAPACITY_OVERRIDE, 0);
+            config.chargingSwitchEnabled = obj.optBoolean(KEY_CHARGING_SWITCH_ENABLED, false);
+            config.chargingSwitchInterval = (float) obj.optDouble(KEY_CHARGING_SWITCH_INTERVAL, 1.0);
+            config.chargingSwitchMeters = obj.optString(KEY_CHARGING_SWITCH_METERS, "TIME,PERCENT");
             return config;
         } catch (Throwable t) {
             Log.e(TAG, "Error parsing config from JSON", t);
@@ -223,6 +270,9 @@ public class PlayTimeConfig {
             .putFloat(KEY_FONT_SIZE, fontSize)
             .putBoolean(KEY_TAP_TOGGLE, tapToggle)
             .putInt(KEY_CAPACITY_OVERRIDE, capacityOverrideMah)
+            .putBoolean(KEY_CHARGING_SWITCH_ENABLED, chargingSwitchEnabled)
+            .putFloat(KEY_CHARGING_SWITCH_INTERVAL, chargingSwitchInterval)
+            .putString(KEY_CHARGING_SWITCH_METERS, chargingSwitchMeters)
             .commit(); // Synchronous commit to ensure file is written to disk
     }
 
@@ -243,6 +293,9 @@ public class PlayTimeConfig {
         config.fontSize = sp.getFloat(KEY_FONT_SIZE, 12f);
         config.tapToggle = sp.getBoolean(KEY_TAP_TOGGLE, true);
         config.capacityOverrideMah = sp.getInt(KEY_CAPACITY_OVERRIDE, 0);
+        config.chargingSwitchEnabled = sp.getBoolean(KEY_CHARGING_SWITCH_ENABLED, false);
+        config.chargingSwitchInterval = sp.getFloat(KEY_CHARGING_SWITCH_INTERVAL, 1.0f);
+        config.chargingSwitchMeters = sp.getString(KEY_CHARGING_SWITCH_METERS, "TIME,PERCENT");
         return config;
     }
 
@@ -260,6 +313,9 @@ public class PlayTimeConfig {
         b.putFloat(KEY_FONT_SIZE, fontSize);
         b.putBoolean(KEY_TAP_TOGGLE, tapToggle);
         b.putInt(KEY_CAPACITY_OVERRIDE, capacityOverrideMah);
+        b.putBoolean(KEY_CHARGING_SWITCH_ENABLED, chargingSwitchEnabled);
+        b.putFloat(KEY_CHARGING_SWITCH_INTERVAL, chargingSwitchInterval);
+        b.putString(KEY_CHARGING_SWITCH_METERS, chargingSwitchMeters);
         b.putString("json", toJson());
         return b;
     }
@@ -286,6 +342,9 @@ public class PlayTimeConfig {
         config.fontSize = b.getFloat(KEY_FONT_SIZE, 12f);
         config.tapToggle = b.getBoolean(KEY_TAP_TOGGLE, true);
         config.capacityOverrideMah = b.getInt(KEY_CAPACITY_OVERRIDE, 0);
+        config.chargingSwitchEnabled = b.getBoolean(KEY_CHARGING_SWITCH_ENABLED, false);
+        config.chargingSwitchInterval = b.getFloat(KEY_CHARGING_SWITCH_INTERVAL, 1.0f);
+        config.chargingSwitchMeters = b.getString(KEY_CHARGING_SWITCH_METERS, "TIME,PERCENT");
         return config;
     }
 

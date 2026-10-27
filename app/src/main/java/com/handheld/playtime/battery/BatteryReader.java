@@ -29,6 +29,11 @@ public class BatteryReader {
         "/sys/class/power_supply/bms/charge_counter"
     };
 
+    private static final String[] SYSFS_STATUS_PATHS = {
+        "/sys/class/power_supply/battery/status",
+        "/sys/class/power_supply/bms/status"
+    };
+
     public BatteryReader(Context context) {
         if (context != null) {
             this.mContext = context.getApplicationContext() != null ? context.getApplicationContext() : context;
@@ -179,6 +184,47 @@ public class BatteryReader {
                 int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
                 return status == BatteryManager.BATTERY_STATUS_CHARGING ||
                        status == BatteryManager.BATTERY_STATUS_FULL;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if device is fully charged.
+     */
+    public boolean isCharged() {
+        if (!isCharging()) {
+            return false;
+        }
+
+        if (getBatteryLevelPercent() >= 100) {
+            return true;
+        }
+
+        if (mContext != null) {
+            Intent intent = mContext.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if (intent != null) {
+                int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                if (status == BatteryManager.BATTERY_STATUS_FULL) {
+                    return true;
+                }
+            }
+        }
+
+        return readSysfsStatusFull();
+    }
+
+    private boolean readSysfsStatusFull() {
+        for (String path : SYSFS_STATUS_PATHS) {
+            File file = new File(path);
+            if (file.exists() && file.canRead()) {
+                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                    String line = reader.readLine();
+                    if (line != null && "Full".equalsIgnoreCase(line.trim())) {
+                        return true;
+                    }
+                } catch (Exception ignored) {
+                }
             }
         }
         return false;
